@@ -1,12 +1,13 @@
 package ClearCase::Argv;
 
-use Argv 0.49 qw(MSWIN);
+$VERSION = '0.21';
 
-use strict;
-use vars qw($VERSION @ISA @EXPORT_OK);
+use Argv 0.50 qw(MSWIN);
+
 @ISA = qw(Argv);
 @EXPORT_OK = (@Argv::EXPORT_OK, qw(ctsystem ctexec ctqx ctqv));
-$VERSION = '0.20';
+
+use strict;
 
 # For programming purposes we can't allow per-user preferences.
 $ENV{CLEARCASE_PROFILE} = '/Over/Ridden/by/ClearCase/Argv';
@@ -207,13 +208,13 @@ sub quote
 sub comment {
     my $self = shift;
     my $cmnt = shift;
-    $self->dbg("setting comment to '$cmnt'");
     my $csafe = $self->ipc_childsafe;
+    my @prev = $self->opts;
     if ($csafe) {
-	$self->opts('-cq', $self->opts);
+	$self->opts('-cq', $self->opts) if !grep /^-cq/, @prev;
 	$csafe->stdin("$cmnt\n.");
     } else {
-	$self->opts('-c', $cmnt, $self->opts);
+	$self->opts('-c', $cmnt, $self->opts) if !grep /^-c/, @prev;
     }
     return $self;
 }
@@ -223,19 +224,19 @@ sub attropts {
     my $self = shift;
     return $self->SUPER::attropts(@_, 'ipc_cleartool');
 }
-*stdopts = *attropts;		# backward compatibility
+*stdopts = \&attropts;		# backward compatibility
 
 # A hack so the Argv functional interfaces can get propagated.
-*system = *Argv::system;
-*exec = *Argv::exec;
-*qv = *Argv::qv;
-*MSWIN = *Argv::MSWIN;
+*system = \&Argv::system;
+*exec = \&Argv::exec;
+*qv = \&Argv::qv;
+*MSWIN = \&Argv::MSWIN;
 
 # Export our own functional interfaces as well.
 sub ctsystem	{ return __PACKAGE__->new(@_)->system }
 sub ctexec	{ return __PACKAGE__->new(@_)->exec }
 sub ctqx	{ return __PACKAGE__->new(@_)->qx }
-*ctqv = *ctqx;  # just for consistency
+*ctqv = \&ctqx;  # just for consistency
 
 1;
 
@@ -315,13 +316,13 @@ ClearTool object; any further executions would revert to 'normal mode'.
 
 =head2 Examples
 
-    # use IPC::ClearTool iff available, else continue silently
+    # use IPC::ClearTool if available, else continue silently
     ClearCase::Argv->ipc_cleartool(1);
-    # use IPC::ClearTool iff available, else print warning and continue
+    # use IPC::ClearTool if available, else print warning and continue
     ClearCase::Argv->ipc_cleartool(2);
-    # same as above (default is 2)
+    # same as above since default == 2
     ClearCase::Argv->ipc_cleartool;
-    # use IPC::ClearTool, die iff not available
+    # use IPC::ClearTool, die if not available
     ClearCase::Argv->ipc_cleartool(3);
     # shut down the IPC::ClearTool coprocess
     ClearCase::Argv->ipc_cleartool(0);
@@ -404,16 +405,23 @@ ClearCase::Argv should work on all ClearCase platforms. It's primarily
 tested on Solaris 7 and NT 4.0, with CC 3.2.1 and 4.0, using Perl5.004
 and 5.005. The CAL stuff doesn't work with CC <3.2.1.
 
-=head1 AUTHOR
+=head1 FILES
 
-David Boyce <dsb@world.std.com>
-
-Copyright (c) 1999,19100 David Boyce. All rights reserved.  This Perl
-program is free software; you may redistribute it and/or modify it
-under the same terms as Perl itself.
+The module is a subclass of I<Argv> and thus requires it to be installed.
+If running in I<ipc mode> it will also need IPC::ClearTool.
 
 =head1 SEE ALSO
 
 perl(1), Argv, IPC::ClearTool, IPC::ChildSafe
+
+=head1 AUTHOR
+
+David Boyce <dsb@world.std.com>
+
+=head1 COPYRIGHT
+
+Copyright (c) 1999,19100 David Boyce. All rights reserved.  This Perl
+program is free software; you may redistribute it and/or modify it
+under the same terms as Perl itself.
 
 =cut

@@ -57,3 +57,7 @@ Revision history for Perl extension ClearCase::Argv.
 
 0.20 Wed Feb  2 14:53:50 EST 2000
 	- Cleaned up ipc_cleartool/Win32 error handling from COM object.
+
+0.21 Thu Feb 10 22:54:32 EST 2000
+	- Fixed typo in previous (affected only 'comment' method).
+	- Fixed 'comment' method to stop piling up -cq flags.

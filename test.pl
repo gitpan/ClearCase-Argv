@@ -155,6 +155,17 @@ ClearCase::Argv->stdout(1);	# turn stdout back on
 print "And then a bogus cmd, suppressing the error (this instance only):\n";
 ClearCase::Argv->new(qw(bogus-command))->dbglevel(1)->stderr(0)->system;
 
+print q(
+************************************************************************
+Demonstrate how to use the AUTOLOAD mechanism, which allows you to
+pass the cleartool command as a method name, e.g. "$obj->pwd('-s')".
+************************************************************************
+
+);
+
+my $x = ClearCase::Argv->new({-dbglevel=>2});
+$x->lslock('-s')->system;
+
 my $reps = $ENV{CCARGV_TEST_REPS} || 50;
 print qq(
 ************************************************************************
@@ -178,6 +189,7 @@ print "$style: ", timestr(timediff(new Benchmark, $t1), 'noc'), "\n";
 $final += printok($rc == 0);
 
 # See if the coprocess module is available and use it if so.
+ClearCase::Argv->ipc_cleartool;
 $style = 'IPC ' if ClearCase::Argv->ipc_cleartool;
 
 # The CAL CmdExec functionality was present but undocumented
