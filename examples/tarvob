@@ -23,8 +23,8 @@ use Getopt::Long;
 use vars qw(%Opt);
 GetOptions(\%Opt, qw(backupdir=s comment=s z));
 
-chomp(@ARGV = ClearCase::Argv->new(qw(lsvob -s))->noexec(0)->stdout(1)->qx)
-								    if !@ARGV;
+chomp(@ARGV = grep !/tmp$/,
+    ClearCase::Argv->new(qw(lsvob -s))->noexec(0)->stdout(1)->qx) if !@ARGV;
 
 my $rc = 0;
 

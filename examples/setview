@@ -17,12 +17,12 @@ my $ct = ClearCase::Argv->new;
 $ct->autochomp;
 
 # Get a list of the local views.
-my @views = $ct->cmd('lsview -s')->qx;
+my @views = $ct->argv('lsview -s')->qx;
 
 print "\n*Show that we can set the coprocess into a view and keep it there.\n";
-$ct->cmd('pwv -s')->system;
-$ct->cmd('setview', [], $views[0])->system;
-$ct->cmd('pwv -s')->system;
+$ct->argv('pwv -s')->system;
+$ct->argv('setview', [], $views[0])->system;
+$ct->argv('pwv -s')->system;
 # ... from here you could cd into a vob and do whatever you want.
 
 print "\n*Similar to above but using the functional interface ...\n";

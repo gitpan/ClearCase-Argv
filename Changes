@@ -35,3 +35,22 @@ Revision history for Perl extension ClearCase::Argv.
 
 0.18 Tue Jan 18 08:28:38 EST 2000
 	- Improved behavior in setuid/root case, cleaned up PATH setting
+
+0.19 Tue Feb  1 09:51:54 EST 2000
+	INCOMPATIBLE CHANGES:
+	- Renamed ccsystem() et al to ctsystem() et al.
+	  Apologies to anyone inconvenienced but my hope is that
+	  the module is still young enough that nobody's depending
+	  heavily on it. The new names are more in line with their
+	  semantics (they prepend 'cleartool') and this frees up future
+	  namespace for possible 'mtsystem()' or whatever.
+	- Renamed 'systemxargs' to 'syxargs'.
+	- Renamed 'pathnorm' to 'inpathnorm', and added
+	  an 'outpathnorm' method as well.
+	- Renamed 'cmd' method to 'argv' (to avoid confusion
+	  with the $self->ipc_cleartool->cmd() method).
+	OTHER CHANGES:
+	- Added ->syfail and ->qxfail attributes.
+	- Allow hashref attr specifiers to have a leading '-'.
+	- Modified the ipc_cleartool method to return the underlying
+	  ChildSafe object when called with no args and a non-void context.

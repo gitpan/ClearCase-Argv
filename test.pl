@@ -17,7 +17,7 @@ BEGIN {
 # Make sure output arrives synchronously.
 select(STDERR); $| = 1; select(STDOUT); $| = 1;
 
-use ClearCase::Argv qw(system exec qv);
+use ClearCase::Argv qw(ctsystem ctqx);
 $final += printok(1);
 
 if (!`cleartool pwd -h`) {
@@ -59,12 +59,12 @@ print qq(
 ************************************************************************
 One thing we did sloppily above: we passed the command as a string,
 thus defeating any chance for the module to (a) do anything smart
-involving options parsing (see qv below) or (b) avoid using
-a shell, which can have lots of unfortunate side effects. So
-in the following lsvob command we'll not only use a list but go further
-by segregating the options part of the argv using an array ref.
-This isn't necessary but is almost always a good idea.  Let's also
-show how to turn on the debug attribute:
+involving options parsing  or (b) avoid using a shell, which can have
+various unfortunate side effects. So in the following lsvob command
+we'll not only use a list but go further by segregating the options
+part of the argv using an array ref.  This isn't necessary but is
+almost always a good idea.  Let's also show how to turn on the debug
+attribute:
 ************************************************************************
 
 );
@@ -97,9 +97,9 @@ on debug output class-wide, just to show that we can:
 $final += printok($? == 0);
 
 ClearCase::Argv->dbglevel(1);
-system(qw(cleartool pwv));
+ctsystem({-autofail=>1}, 'pwv');
 $final += printok($? == 0);
-my @views = qv("cleartool lsview");
+my @views = ctqx('lsview');
 $final += printok($? == 0);
 print "You have ", scalar @views, " views in this region\n";
 ClearCase::Argv->dbglevel(0);
