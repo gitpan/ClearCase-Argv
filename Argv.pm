@@ -1,10 +1,10 @@
 package ClearCase::Argv;
 
-$VERSION = '1.07';
+$VERSION = '1.08';
 
-use Argv 1.06;
+use Argv 1.08;
 
-use constant MSWIN	=> $^O =~ /MSWin32|Windows_NT/i;
+use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 
 @ISA = qw(Argv);
 @EXPORT_OK = (@Argv::EXPORT_OK, qw(ctsystem ctexec ctqx ctqv));
@@ -62,6 +62,7 @@ sub find_cleartool { (undef, $ct) = @_ if $_[1]; $ct }
 # or is an absolute path.
 sub prog {
     my $self = shift;
+    return $self->SUPER::prog unless @_;
     my $prg = shift;
     if (@_ || ref($prg) || $prg =~ m%^/|^\S*cleartool% || $self->ctcmd) {
 	return $self->SUPER::prog($prg, @_);
@@ -94,7 +95,7 @@ sub system {
     my $dbg = $self->dbglevel;
     $self->_addstats("cleartool @prog", scalar @args) if defined %Argv::Summary;
     $self->warning("cannot close stdin of child process") if $ifd;
-    if ($self->noexec) {
+    if ($self->noexec && !$self->_read_only) {
 	$self->_dbg($dbg, '-', \*STDERR, @cmd);
 	return 0;
     }
@@ -114,7 +115,7 @@ sub system {
 	$errplace = -1 if $efd == 0;
     }
     $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
-    my $ct = CtCmd->new(outfunc=>$outplace, errfunc=>$errplace);
+    my $ct = ClearCase::CtCmd->new(outfunc=>$outplace, errfunc=>$errplace);
     if ($envp) {
 	local %ENV = %$envp;
 	$ct->exec(@cmd);
@@ -144,12 +145,12 @@ sub qx {
     my $dbg = $self->dbglevel;
     $self->_addstats("cleartool @prog", scalar @args) if defined %Argv::Summary;
     $self->warning("cannot close stdin of child process") if $ifd;
-    if ($self->noexec) {
+    if ($self->noexec && !$self->_read_only) {
 	$self->_dbg($dbg, '-', \*STDERR, @cmd);
 	return 0;
     }
     $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
-    my $ct = CtCmd->new;
+    my $ct = ClearCase::CtCmd->new;
     my($rc, $data, $errors);
     if ($envp) {
 	local %ENV = %$envp;
@@ -196,7 +197,7 @@ sub unixpath {
 sub ctcmd {
     my $self = shift;	# this might be an instance or a classname
     my $level = shift;
-    eval { require CtCmd };
+    eval { require ClearCase::CtCmd };
     if ($@ && defined($level)) {
 	if ($level == 2) {
 	    if ($@ =~ /^(Can't locate [^(]+)/) {
@@ -212,8 +213,7 @@ sub ctcmd {
     if (defined($level)) {
 	if ($level) {
 	    if ($self->ipc_cleartool) {
-		$self->warning("cannot use IPC::ClearTool and CtCmd together")
-								    if $level>1;
+		$self->warning("cannot use IPC::ClearTool and ClearCase::CtCmd together");
 		return 0;
 	    }
 	    $self->{CCAV_CTCMD} = 1;
@@ -246,7 +246,7 @@ sub ipc_cleartool {
 	return $self->ipc_childsafe; # return the active ChildSafe object
     }
     if ($self->ctcmd) {
-	$self->warning("attempt to use ipc_cleartool and CtCmd together");
+	$self->warning("cannot use IPC::ClearTool and ClearCase::CtCmd together");
 	return 0;
     }
     my $chk = sub { return int grep /Error:\s/, @{$_[0]} };
@@ -323,6 +323,22 @@ sub ipc_cleartool {
 	}
     }
     return $self;
+}
+
+sub _read_only {
+    my $self = shift;
+    if ($self->readonly =~ /^a/i) {	# a=automatic
+	my @cmd = $self->prog;
+	if ($cmd[-1] =~ m%^(ls|annotate|apropos|cat|des|diff|dospace|
+			    file|getcache|getlog|help|host|man|pw|
+			    setview|space)%x) {
+	    return 1;
+	} else {
+	    return 0;
+	}
+    } else {
+	return $self->SUPER::_read_only;
+    }
 }
 
 # The cleartool command has quoting rules different from any system
@@ -438,17 +454,17 @@ is a good source for cut-and-paste code.
 I<ClearCase::Argv> is a subclass of I<Argv> for use with ClearCase.  It
 exists to provide an abstraction layer over I<cleartool>. A program
 written to this interface can be told to send commands to ClearCase via
-the standard technique of executing cleartool or via the CtCmd or
-IPC::ClearTool modules (see) by flipping a switch.
+the standard technique of executing cleartool or via the
+ClearCase::CtCmd or IPC::ClearTool modules (see) by flipping a switch.
 
 To that end it provides a couple of special methods I<C<ctcmd>> and
 I<C<ipc_cleartool>>. The C<ctcmd> method can be used to cause cleartool
-commands to be run in the current process space using I<CtCmd>.
-Similarly, C<ipc_cleartool> will send commands to a cleartool
-co-process using the I<IPC::ClearTool> module. The CtCmd and
-IPC::ClearTool modules must be separately installed for these to
-work. See their docs for details on what they do, and see I<ALTERNATE
-EXECUTION INTERFACES> below for how to invoke them.
+commands to be run in the current process space using
+I<ClearCase::CtCmd>.  Similarly, C<ipc_cleartool> will send commands to
+a cleartool co-process using the I<IPC::ClearTool> module. The
+ClearCase::CtCmd and IPC::ClearTool modules must be installed for these
+methods to work. See their docs for details on what they do, and see
+I<ALTERNATE EXECUTION INTERFACES> below for how to invoke them.
 
 As I<ClearCase::Argv is in other ways identical to its base class>, see
 C<perldoc Argv> for substantial further documentation.
@@ -463,14 +479,32 @@ semantics. These include:
 =item * prog
 
 I<ClearCase::Argv-E<gt>prog> prepends the word C<cleartool> to each
-command line when in standard (not CtCmd or IPC::ClearTool) mode.
+command line when in standard (not ClearCase::CtCmd or IPC::ClearTool)
+mode.
 
 =item * quote
 
-The cleartool "shell" has its own quoting rules. Therefore, when using 
-CtCmd or IPC::ClearTool modes, command-line quoting must be adjusted
-to fit cleartool's rules rather than those of the native system shell,
-so the C<-E<gt>quote> method is extended to handle that case.
+The cleartool "shell" has its own quoting rules. Therefore, when using
+ClearCase::CtCmd or IPC::ClearTool modes, command-line quoting must be
+adjusted to fit cleartool's rules rather than those of the native
+system shell, so the C<-E<gt>quote> method is extended to handle that
+case.
+
+=item * readonly
+
+It's often useful to set the following class attribute:
+
+    ClearCase::Argv->readonly('auto');
+
+This does nothing by itself but it modifies the behavior of the
+I<-E<gt>noexec> attribute: instead of skipping execution of all
+commands, it only skips commands which modify ClearCase state.
+
+Consider a script which does an C<lsview> to see if a view exists, then
+a C<mkview> to create it if not. With just I<-E<gt>noexec> set, both
+commands would be skipped. With C<readonly=auto> also, only the state-
+modifying (mkview) operation is skipped. This causes scripts to behave
+far more realistically in I<-E<gt>noexec> mode.
 
 =item * outpathnorm
 
@@ -536,11 +570,11 @@ argument of 3 the warning becomes a fatal error.
 
 =head2 Examples
 
-    # use CtCmd if available, else continue silently
+    # Use CtCmd if available, else continue silently
     ClearCase::Argv->ctcmd(1);
-    # use CtCmd if available, else print warning and continue
+    # Use CtCmd if available, else print warning and continue
     ClearCase::Argv->ctcmd(2);
-    # Try CtCmd, die if not available
+    # Use CtCmd if available, else die with error msg
     ClearCase::Argv->ctcmd(3);
     # Turn off use of CtCmd
     ClearCase::Argv->ctcmd(0);
@@ -548,6 +582,11 @@ argument of 3 the warning becomes a fatal error.
 Typically C<-E<gt>ctcmd> will be used as a class method to specify a
 place for all cleartool commands to be sent. However, it may also be
 invoked on an object to associate just that instance with CtCmd.
+
+These rules apply to IPC::ClearTool the same way but with a different
+method name, e.g.:
+
+    ClearCase::Argv->ipc_cleartool(1);
 
 Note: you can tell which mode is in use by turning on the I<dbglevel>
 attribute. Verbosity styles are as follows:

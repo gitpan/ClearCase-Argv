@@ -176,10 +176,11 @@ print qq(
 ************************************************************************
 The following test doubles as a benchmark. It compares $reps
 invocations of "cleartool lsview -l" using a fork/exec (`cmd`) style vs
-$reps using the CtCmd (in-process) and IPC::ClearTool (co-process)
-models, if those modules are installed. If not, it will fall back the
-fork/exec.  If $reps is the wrong number for your environment, you can
-override it with the CCARGV_TEST_REPS environment variable.
+$reps using the ClearCase::CtCmd (in-process) and IPC::ClearTool
+(co-process) models, if those modules are installed. If not, it will
+fall back the fork/exec.  If $reps is the wrong number for your
+environment, you can override it with the CCARGV_TEST_REPS environment
+variable.
 ************************************************************************
 
 );
@@ -205,7 +206,7 @@ if (ClearCase::Argv->ipc_cleartool(1)) {
 						    if printok($sum1 == $sum2);
 }
 
-# See if the CtCmd module is available and try it if so.
+# See if the ClearCase::CtCmd module is available and try it if so.
 if (ClearCase::Argv->ctcmd(1)) {
     my $t3 = new Benchmark;
     my $api = ClearCase::Argv->new('lsview', ['-l']);
@@ -220,10 +221,11 @@ if (ClearCase::Argv->ctcmd(1)) {
 
 print qq(
 ************************************************************************
-With luck, if you have CtCmd or IPC::ChildSafe installed, you were able to
-see a substantial speedup using them. I usually see multiples ranging
-from 50% to 10:1, but this is dependent on a wide range of factors.
-Last, we'll use the 'summary' class method to see what cmds were run:
+With luck, if you have ClearCase::CtCmd or IPC::ChildSafe installed,
+you were able to see a substantial speedup using them. I usually see
+multiples ranging from 50% to 10:1, but this is dependent on a wide
+range of factors.  Last, we'll use the 'summary' class method to see
+what cmds were run:
 ************************************************************************
 
 );
