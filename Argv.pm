@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.06';
+$VERSION = '1.07';
 
 use Argv 1.06;
 
@@ -113,12 +113,14 @@ sub system {
 	warn "Warning: illegal value '$efd' for stderr" if $efd > 2;
 	$errplace = -1 if $efd == 0;
     }
-    local %ENV = $envp ? %$envp : %ENV;
-    # Work around a CC 5.0 (or CtCmd?) bug
-    $ENV{PERL_BADFREE} = 0 unless defined $ENV{PERL_BADFREE};
     $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
     my $ct = CtCmd->new(outfunc=>$outplace, errfunc=>$errplace);
-    $ct->exec(@cmd);
+    if ($envp) {
+	local %ENV = %$envp;
+	$ct->exec(@cmd);
+    } else {
+	$ct->exec(@cmd);
+    }
     my $rc = $ct->status;
     $? = $rc;
     print STDERR "+ (\$? == $?)\n" if $dbg > 1;
@@ -146,12 +148,15 @@ sub qx {
 	$self->_dbg($dbg, '-', \*STDERR, @cmd);
 	return 0;
     }
-    local %ENV = $envp ? %$envp : %ENV;
-    # Work around a CC 5.0 (or CtCmd?) bug
-    $ENV{PERL_BADFREE} = 0 unless defined $ENV{PERL_BADFREE};
     $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
     my $ct = CtCmd->new;
-    my($rc, $data, $errors) = $ct->exec(@cmd);
+    my($rc, $data, $errors);
+    if ($envp) {
+	local %ENV = %$envp;
+	($rc, $data, $errors) = $ct->exec(@cmd);
+    } else {
+	($rc, $data, $errors) = $ct->exec(@cmd);
+    }
     $? = $rc;
     print STDERR $errors if $efd == 2;
     print STDERR "+ (\$? == $?)\n" if $dbg > 1;

@@ -98,3 +98,8 @@ Revision history for Perl extension ClearCase::Argv.
 	- Added support for CtCmd.
 	- Require use of Argv 1.06 since there are a couple
 	  significant bugfixes there.
+
+1.07 Sun Jan 13 22:24:55 EST 2002
+	- Work around the spurious "bad free" warning emitted by CtCmd
+	  (not clear whether the bug is in Perl, CtCmd, or Solaris
+	  but in any case we suppress it here with a scoping hack).
