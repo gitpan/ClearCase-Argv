@@ -14,7 +14,8 @@ BEGIN {
    }
 }
 
-$| = 1;
+# Make sure output arrives synchronously.
+select(STDERR); $| = 1; select(STDOUT); $| = 1;
 
 use ClearCase::Argv qw(system exec qv);
 $final += printok(1);

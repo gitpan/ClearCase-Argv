@@ -143,10 +143,11 @@ need for UNIX/Windows portability and different shell-quoting rules. So
 extensions written to the <STRONG>ClearCase::Ct</STRONG> ``API'' tend to be a nest of ifdefs (wrong language, I know).
 
 <P>
-So I started out to rewrite <CODE>ClearCase::Ct</CODE>. The first step was to write a module (eventually called <STRONG>Argv</STRONG>) to hide all the <CODE>@ARGV</CODE> machinations under an OO interface. It
-has plenty of its own docs so I won't go into it here, but you could pretty
-much get a command line to sit up and bark like a dog with <STRONG>Argv</STRONG>. In fact it provides much more parsing power than almost anyone would ever
-need, so although this is its original reason for existence it's the least
+So I started out to rewrite <CODE>ClearCase::Ct</CODE>. The first step was to write a support module (eventually called <STRONG>Argv</STRONG>) to hide all the <CODE>@ARGV</CODE> machinations under an OO interface. It
+has plenty of its own docs so I won't go into it here, but suffice it to
+say it provides a lot of ways to manipulate an arg vector. In fact it
+provides much more parsing power than almost anyone would ever need, so
+although this is its original reason for existence it's the least
 interesting to most.
 
 <P>
@@ -173,7 +174,7 @@ adding the above line - plus converting <CODE>`cmd`</CODE> to
 
 <P>
 As of this writing I haven't ever gotten around to rewriting
-<CODE>ClearCase::Ct</CODE> to use <STRONG>Argv</STRONG>, but I've used it to write lots of other portable Perl code.
+<CODE>ClearCase::Ct</CODE> to use <STRONG>Argv</STRONG>, but I've used <STRONG>Argv</STRONG> to write lots of other portable Perl code.
 
 <P>
 <HR>
@@ -195,6 +196,20 @@ represents an <CODE>&quot;ls -l&quot;</CODE> command,
 would run <CODE>&quot;cleartool ls -l&quot;</CODE>, and it understands that the 'program' part of the command line is
 ``cleartool ci'' (or more properly <CODE>qw(cleartool</CODE> ci)).
 
+<P>
+The <EM>functional interface</EM> of <EM>Argv</EM> is exposed through
+<STRONG>ClearCase::Argv</STRONG>, and it's also extended to support methods called
+<STRONG>ccsystem(), ccexec(), and ccqx()</STRONG> which automatically prepend 'cleartool'. E.g.:
+
+<P>
+<PRE>        my @views = ccqx(lsview -s);
+</PRE>
+<P>
+Attributes can be set through the functional interface like this:
+
+<P>
+<PRE>        my @views = ccqx({autochomp=&gt;1}, lsview -s);
+</PRE>
 <P>
 <HR>
 <H1><A NAME="GRAND_UNIFICATION">GRAND UNIFICATION</A></H1>

@@ -1,7 +1,9 @@
 #!/usr/local/bin/perl
 
 ## This is an example of how to set the child process into a view
-## and control it.
+## and control it. Note that although this will work on both UNIX
+## and Windows, it will give errors on Windows because that's
+## what the CC developers chose to do for some reason.
 
 use ClearCase::Argv qw(ccsystem ccqx);
 

@@ -114,10 +114,10 @@ extensions written to the B<ClearCase::Ct> "API" tend to be a nest of
 ifdefs (wrong language, I know).
 
 So I started out to rewrite C<ClearCase::Ct>. The first step was to
-write a module (eventually called B<Argv>) to hide all the @ARGV
-machinations under an OO interface. It has plenty of its own docs so I
-won't go into it here, but you could pretty much get a command line to
-sit up and bark like a dog with B<Argv>. In fact it provides much more
+write a support module (eventually called B<Argv>) to hide all the
+@ARGV machinations under an OO interface. It has plenty of its own docs
+so I won't go into it here, but suffice it to say it provides a lot of
+ways to manipulate an arg vector.  In fact it provides much more
 parsing power than almost anyone would ever need, so although this is
 its original reason for existence it's the least interesting to most.
 
@@ -143,7 +143,7 @@ Bottom line, adding the above line - plus converting C<`cmd`> to
 C<qv(cmd)> - buys a lot of UNIX/Win32 portability.
 
 As of this writing I haven't ever gotten around to rewriting
-C<ClearCase::Ct> to use B<Argv>, but I've used it to write lots of
+C<ClearCase::Ct> to use B<Argv>, but I've used B<Argv> to write lots of
 other portable Perl code.
 
 =head2 ClearCase::Argv
@@ -162,6 +162,17 @@ represents an C<"ls -l"> command,
 
 would run C<"cleartool ls -l">, and it understands that the 'program' part
 of the command line is "cleartool ci" (or more properly qw(cleartool ci)).
+
+The I<functional interface> of I<Argv> is exposed through
+B<ClearCase::Argv>, and it's also extended to support methods called
+B<ccsystem(), ccexec(), and ccqx()> which automatically prepend
+'cleartool'. E.g.:
+
+	my @views = ccqx(lsview -s);
+
+Attributes can be set through the functional interface like this:
+
+	my @views = ccqx({autochomp=>1}, lsview -s);
 
 =head1 GRAND UNIFICATION
 

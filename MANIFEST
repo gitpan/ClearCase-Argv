@@ -4,6 +4,8 @@ MANIFEST
 README
 README.html
 Makefile.PL
+examples/fix_eltype
+examples/functional
 examples/setview
 examples/tarvob
 test.pl

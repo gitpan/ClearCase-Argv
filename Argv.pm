@@ -1,48 +1,55 @@
 package ClearCase::Argv;
 
-use Argv 0.41;
+use Argv 0.46 qw(MSWIN);
 
 use strict;
 use vars qw($VERSION @ISA @EXPORT_OK);
 @ISA = qw(Argv);
-@EXPORT_OK = (@Argv::EXPORT_OK, qw(ccsystem ccexec ccqx));
-$VERSION = '0.15';
+@EXPORT_OK = (@Argv::EXPORT_OK, qw(ccsystem ccexec ccqx ccqv));
+$VERSION = '0.17';
 
 # For programming purposes we can't allow per-user preferences.
-$ENV{CLEARCASE_PROFILE} = '/no/such/profile';
+$ENV{CLEARCASE_PROFILE} = '/overridden/by/ClearCase/Argv';
 
 # Allow EV's setting class data in the derived class to override
-# the base class's defaults.
+# the base class's defaults.There's probably a better way.
 for (grep !/^_/, keys %Argv::Argv) {
     (my $ev = uc(join('_', __PACKAGE__, $_))) =~ s%::%_%g;
     $Argv::Argv{$_} = $ENV{$ev} if defined $ENV{$ev};
 }
 
-# Attempt to find the definitive cleartool path at startup. But don't
-# try excruciatingly hard - it would take unwarranted time. Admins
-# with a really strange install can make a patch.
-if ($^O !~ /win32/i) {
-    $ENV{PATH} .= ':/usr/atria/bin'
-			if -d '/usr/atria/bin' && $ENV{PATH} !~ m%/atria/bin%;
-} else {
-    for (   'C:/Program Files/Rational/ClearCase/bin',
-	    'D:/Program Files/Rational/ClearCase/bin',
-	    'C:/atria/bin',
-	    'D:/atria/bin') {
-	if (-d $_) { $ENV{PATH} .= ";$_"; last }
+# Attempt to find the definitive ClearCase bin path at startup. Don't
+# try excruciatingly hard - it would take unwarranted time. And don't
+# do so at all if running setuid or as root. If this doesn't work,
+# you can set the path explicitly via the 'cleartool' class method.
+if (MSWIN || ($< && ($< == $>))) {
+    if (!MSWIN) {
+	$ENV{PATH} .= ':/usr/atria/bin'
+		    if -d '/usr/atria/bin' && $ENV{PATH} !~ m%/atria/bin%;
+    } else {
+	for (   'C:/Program Files/Rational/ClearCase/bin',
+		'D:/Program Files/Rational/ClearCase/bin',
+		'C:/atria/bin',
+		'D:/atria/bin') {
+	    if (-d $_) { $ENV{PATH} .= ";$_"; last }
+	}
     }
 }
 
+# Class method to specify the location of 'cleartool'.
+my $ct = 'cleartool';
+sub cleartool { (undef, $ct) = @_ }
 
 # Change a prog value of q(ls) to qw(cleartool ls). If the value is
-# already an array or array ref leave it alone.
+# already an array or array ref leave it alone. Or if the 1st word
+# contains /cleartool/.
 sub prog {
     my $self = shift;
     my $prg = shift;
-    if (@_ || ref $prg) {
+    if (@_ || ref($prg) || $prg =~ /cleartool/) {
 	return $self->SUPER::prog($prg, @_);
     } else {
-	return $self->SUPER::prog(['cleartool', $prg], @_);
+	return $self->SUPER::prog([$ct, $prg], @_);
     }
 }
 
@@ -50,31 +57,31 @@ sub prog {
 # This class method determines if 3.2.1 is in use and sets an attr
 # which causes the lines to be reversed.
 # We could do this automatically but want to avoid penalizing 4.0+ users.
+# This method is defined but a no-op on UNIX.
 sub cc_321_hack {
-    return unless $^O =~ /win32/i;
+    return unless MSWIN;
     my $self = shift;
     my $csafe = $self->ipc_childsafe;
     return $csafe->cc_321_hack if $csafe;
 }
 
-# This sets up the appropriate commands for a cleartool coprocess.
+# Starts or stops a cleartool coprocess.
 sub ipc_cleartool {
     my $self = shift;	# this might be an instance or a classname
     my $level = shift;
-    my $chk;
-    my @args;
+    my($chk, @args);
     if (defined($level) && !$level) {
 	return $self->ipc_childsafe(0);	# close up shop
     } else {
 	$chk = sub { return int grep /Error:\s/, @{$_[0]} };
 	my %params = ( CHK => $chk, QUIT => 'exit' );
-	@args = ('cleartool', 'pwd -h', 'Usage: pwd', \%params);
+	@args = ($ct, 'pwd -h', 'Usage: pwd', \%params);
     }
     eval { require IPC::ChildSafe };
     if (!$@) {
 	local $@;
-	IPC::ChildSafe->VERSION(3.06);
-	if ($^O =~ /win32/i) {
+	IPC::ChildSafe->VERSION(3.08);
+	if (MSWIN) {
 	    require Win32::OLE;
 	    no strict 'subs';
 	    local $^W = 0;
@@ -96,7 +103,7 @@ sub ipc_cleartool {
 		$self->{IPC_STATUS} = $error;
 		# CmdExec always returns a scalar through Win32::OLE so
 		# we have to split it in case it's really a list.
-		my @stdout = $self->_fixup_COM_scalars($out);
+		my @stdout = $self->_fixup_COM_scalars($out) if $out;
 		print map {"+ <<-- $_"} @stdout if @stdout && $dbg > 1;
 		push(@{$self->{IPC_STDOUT}}, @stdout);
 		push(@{$self->{IPC_STDERR}},
@@ -141,25 +148,24 @@ sub ipc_cleartool {
 # The cleartool command has different quoting rules from any
 # shell, so subclass the quoting method to deal with it. Not
 # currently well tested with esoteric cmd lines such as mkattr.
+## THIS STUFF IS REALLY COMPLEX WITH ALL THE PERMUTATIONS
+## OF PLATFORMS AND API'S. WATCH OUT.
 sub quote
 {
     my $self = shift;
-    if (!$self->ipc_childsafe) {
-	if (@_ > 2) {
-	    return $self->SUPER::quote(@_);
-	} else {
-	    # We don't want to quote the 2nd word
-	    # in the case where @_ = ('cleartool', 'pwv -s');
-	    $self->SUPER::quote($_[0]);
-	    return @_;
-	}
-    }
-    if ($^O !~ /win32/i) {
+    # Don't quote the 2nd word where @_ = ('cleartool', 'pwv -s');
+    return @_ if @_ == 2;
+    # If IPC::ChildSafe not in use, protect against the shell.
+    return $self->SUPER::quote(@_) if @_ > 2 && !$self->ipc_childsafe;
+    # Special case - extract comments and place them in stdin stream
+    # when using UNIX co-process model.
+    if (!MSWIN) {
 	$self->optset('IPC_COMMENT');
 	if (my @cmnt = $self->factor('IPC_COMMENT', [qw(c=s)], undef, \@_)) {
 	    $self->ipc_childsafe->stdin("$cmnt[1]\n.");
 	}
     }
+    # Ok, now we're looking at interactive-cleartool quoting ("man cleartool").
     for (@_) {
 	# If requested, change / for \ in Windows file paths.
 	s%/%\\%g if $self->pathnorm;
@@ -177,6 +183,9 @@ sub quote
     return @_;
 }
 
+# Hack - allow a comment to be registered here. The next command will
+# see it with -c "comment" if in regular mode or -cq and reading the
+# comment from stdin if in ipc_cleartool mode.
 sub comment {
     my $self = shift;
     my $cmnt = shift;
@@ -191,20 +200,24 @@ sub comment {
     return $self;
 }
 
-sub stdopts {
+# Add -/ipc_cleartool to list of supported attr-flags.
+sub attropts {
     my $self = shift;
-    return $self->SUPER::stdopts(@_, 'ipc_cleartool');
+    return $self->SUPER::attropts(@_, 'ipc_cleartool');
 }
+*stdopts = *attropts;		# backward compatibility
 
 # A hack so the Argv functional interfaces can get propagated.
 *system = *Argv::system;
 *exec = *Argv::exec;
 *qv = *Argv::qv;
+*MSWIN = *Argv::MSWIN;
 
 # Export our own functional interfaces as well.
 sub ccsystem	{ return __PACKAGE__->new(@_)->system }
 sub ccexec	{ return __PACKAGE__->new(@_)->exec }
 sub ccqx	{ return __PACKAGE__->new(@_)->qx }
+*ccqv = *ccqx;  # just for consistency
 
 1;
 
@@ -216,10 +229,31 @@ ClearCase::Argv - ClearCase-specific subclass of Argv
 
 =head1 SYNOPSIS
 
+    # OO interface
     use ClearCase::Argv;
-    my $describe = ClearCase::Argv->new('desc', [qw(-fmt %c)], "filename");
-    $describe->parse(qw(fmt=s));
+    ClearCase::Argv->dbglevel(1);
+    # Note how the command, flags, and arguments are separated ...
+    my $describe = ClearCase::Argv->new('desc', [qw(-fmt %c)], ".");
+    # Run the basic "ct describe" command.
     $describe->system;
+    # Run it with with stderr turned off.
+    $describe->stderr(0)->system;
+    # Run it without the flags.
+    $describe->system(-);
+    # Create label type iff it doesn't exist
+    ClearCase::Argv->new(qw(mklbtype -nc XX))
+		if ClearCase::Argv->new(qw(lstype lbtype:XX))->stderr(0)->qx;
+
+    # functional interface
+    use ClearCase::Argv qw(ccsystem ccexec ccqx);
+    ccsystem('pwv');
+    my @lsco = ccqx(qw(lsco -avobs -s));
+    # Similar to OO example: create label type iff it doesn't exist
+    ccsystem(qw(mklbtype -nc XX)) if !ccqx({stderr=>0}, "lstype lbtype:XX");
+
+B<There are more examples in the ./examples subdir that comes with this
+module. Also, the test script is designed as a demo and benchmark;
+it's probably your best source for cut-and-paste code.
 
 =head1 DESCRIPTION
 
@@ -235,19 +269,77 @@ on platforms where IPC::ClearTool is not available will result in a
 warning and execution will continue using traditional fork/exec.
 
 Functionally ClearCase::Argv is identical to its base class, so see
-"perldoc Argv" and/or "perldoc IPC::ChildSafe" for all other
-documentation.
+"perldoc Argv" for substantial further documentation.
+
+=head1 FUNCTIONAL INTERFACE
+
+For those who don't like OO style, or who want to convert existing
+scripts with the least effort, the I<execution methods> are made
+available as traditional functions. Examples:
+
+	use ClearCase::Argv qw(ccsystem ccexec ccqx);
+	my $cwv = ccqx(pwv -s);
+	ccsystem('mklbtype', ['-global'], 'FOO') && exit $?>>8;
+	my @vobs = ccqx({autochomp=>1}, 'lsvob -s');
+
+or if you prefer you can override the "real" Perl builtins. This
+is easier for converting a script which already uses system(), exec(),
+or qx() a lot:
+
+	use ClearCase::Argv qw(system exec qv);
+	my $cwv = qv(cleartool pwv -s);
+	system('cleartool', 'mklbtype', ['-global'], 'FOO') && exit $?>>8;
+	my @vobs = qv({autochomp=>1}, 'lsvob -s');
+
+Note that when using an overridden system() et al you must still specify
+'cleartool' as the program, whereas ccsystem() and friends handle that.
+
+=head1 CAREFUL PROGRAMMERS WANTED
+
+If you're the kind of programmer who tends to execute whole strings
+such as C<system("cleartool pwv -s")> or who uses backquotes in a void
+context, this module won't help you much. These are bad habits
+regardless of whether you use ClearCase::Argv and you should strive to
+overcome them.
+
+=head1 STICKINESS
+
+A subtlety: when an execution attribute is set in a void context, it's
+I<"sticky">, meaning that it's set until explicitly reset. But in a
+non-void context the new value is temporary or I<"non-sticky">; it's
+pushed on a stack and popped off after being used once. This applies to
+both class and instance uses. It's done this way to allow the following
+locutions:
+
+    ClearCase::Argv->stdout(0);	# turns off stdout for all objects
+    $obj->stdout(0);		# turns off stdout for this object, forever
+    $obj->stdout(0)->system;	# suppresses stdout, this time only
+
+Which allows you to set up an object with some sticky attributes and
+keep it around, executing it at will and overriding other attrs
+temporarily. In the example below, note that another way of setting
+sticky attrs is shown:
+
+    my $obj = ClearCase::Argv->new({autofail=>1, autochomp=>1});
+    my $view = $obj->cmd('pwv -s')->qx;
+    my $exists = $obj->cmd('lstype', 'brtype:FOO')->autofail(0)->qx;
+
+Here we keep an object with attrs 'autofail' and 'autochomp' around
+and use it to exec whatever commands we want (autofail means to
+exit on any failure), but we suppress the autofail attr when
+we're just looking to see if a type exists yet.
 
 =head1 BUGS
 
-I believe there are still some special I<cleartool> quoting situations
+I suspect there are still some special I<cleartool> quoting situations
 unaccounted for in the C<quote> method. This will need to be refined
-over time. Patches gratefully accepted.
+over time. Bug reports or patches gratefully accepted.
 
 =head1 PORTABILITY
 
-This module should work on all ClearCase platforms. It was primarily
-tested on Solaris 7 and NT 4.0, with CC 3.2.1 and 4.0.
+This module should work on all ClearCase platforms. It's primarily
+tested on Solaris 7 and NT 4.0, with CC 3.2.1 and 4.0, using Perl5.004
+and 5.005. The CAL stuff doesn't work with CC <3.2.1.
 
 =head1 AUTHOR
 
