@@ -4,6 +4,7 @@ MANIFEST
 README
 README.html
 Makefile.PL
+examples/CCreport
 examples/fix_eltype
 examples/functional
 examples/setview

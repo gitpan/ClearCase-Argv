@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '0.22';
+$VERSION = '0.23';
 
 use Argv 0.51 qw(MSWIN);
 
@@ -25,7 +25,7 @@ for (grep !/^_/, keys %Argv::Argv) {
 my $ct = 'cleartool';
 
 # Attempt to find the definitive ClearCase bin path at startup. Don't
-# try excruciatingly hard - it would take unwarranted time. And don't
+# try excruciatingly hard, it would take unwarranted time. And don't
 # do so at all if running setuid or as root. If this doesn't work,
 # the path can be set explicitly via the 'cleartool' class method.
 if (!MSWIN && ($< == 0 || $< != $>)) {
@@ -35,7 +35,8 @@ if (!MSWIN && ($< == 0 || $< != $>)) {
 	my $abin = $ENV{ATRIAHOME} ? "$ENV{ATRIAHOME}/bin" : '/usr/atria/bin';
 	$ENV{PATH} .= ":$abin" if -d $abin && $ENV{PATH} !~ m%/atria/bin%;
     } else {
-	for (   "$ENV{ATRIAHOME}/bin",
+	local $^W = 0;
+	for (   ($ENV{ATRIAHOME} || '') . "/bin",
 		'C:/Program Files/Rational/ClearCase/bin',
 		'D:/Program Files/Rational/ClearCase/bin',
 		'C:/atria/bin',
@@ -57,7 +58,7 @@ sub cleartool { (undef, $ct) = @_ if $_[1]; $ct }
 sub prog {
     my $self = shift;
     my $prg = shift;
-    if (@_ || ref($prg) || $prg =~ m%^/|cleartool%) {
+    if (@_ || ref($prg) || $prg =~ m%^/|^\S*cleartool%) {
 	return $self->SUPER::prog($prg, @_);
     } else {
 	return $self->SUPER::prog([$ct, $prg], @_);

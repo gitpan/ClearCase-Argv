@@ -61,3 +61,9 @@ Revision history for Perl extension ClearCase::Argv.
 0.21 Thu Feb 10 22:54:32 EST 2000
 	- Fixed typo in previous (affected only 'comment' method).
 	- Fixed 'comment' method to stop piling up -cq flags.
+
+0.23 Wed May 31 15:43:08 EDT 2000
+	- Bugfix: allow single-string commands to manipulate
+	  files matching /.*cleartool.*/ without it being mistaken
+	  for a command prefix.
+	- Fixed spurious warning.
