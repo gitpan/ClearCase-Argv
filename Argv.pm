@@ -1,8 +1,8 @@
 package ClearCase::Argv;
 
-$VERSION = '1.10';
+$VERSION = '1.11';
 
-use Argv 1.07;
+use Argv 1.09;
 
 use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 
@@ -366,22 +366,16 @@ sub quote {
 	    }
 	}
     }
+    # Single quotes aren't understood by the &*&#$ Windows shell
+    # but cleartool gets them right so this quoting is simpler.
     my $inpathnorm = $self->inpathnorm;
     for (@_) {
 	# If requested, change / for \ in Windows file paths.
 	s%/%\\%g if $inpathnorm;
-	# Special case - turn internal newlines back to literal \n
-	s%\n%\\n%g if !MSWIN;
-	# Skip arg if already quoted ...
-	next if m%^".*"$%s;
-	# ... or contains no special chars.
-	next unless m%[*\s~?\[\]]%;
 	# Now quote embedded quotes ...
-	$_ =~ s%(\\*)"%$1$1\\"%g;
-	# quote trailing \ so it won't quote the " ...
-	s%\\{1}$%\\\\%;
-	# and last the entire string.
-	$_ = qq("$_");
+	s%'%\\'%g;
+	# and then the entire string.
+	$_ = qq('$_');
     }
     return @_;
 }

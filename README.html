@@ -11,6 +11,7 @@
 
 <UL>
 
+	<LI><A HREF="#important note">IMPORTANT NOTE</A></LI>
 	<LI><A HREF="#readme">README</A></LI>
 	<LI><A HREF="#summary of features">SUMMARY OF FEATURES</A></LI>
 	<LI><A HREF="#chronology">CHRONOLOGY</A></LI>
@@ -22,14 +23,20 @@
 	</UL>
 
 	<LI><A HREF="#grand unification">GRAND UNIFICATION</A></LI>
-	<LI><A HREF="#release state">RELEASE STATE</A></LI>
 </UL>
 <!-- INDEX END -->
 
 <HR>
 <P>
+<H1><A NAME="important note">IMPORTANT NOTE</A></H1>
+<P>THIS module is called ``ClearCase::Argv''. There is a DIFFERENT module
+called ``Argv''. ClearCase::Argv depends on (requires) Argv. That is, you
+must download and install BOTH in order for ClearCase::Argv to work.
+This has confused quite a few people so I highlight it here.</P>
+<P>
+<HR>
 <H1><A NAME="readme">README</A></H1>
-<P>Though ClearCase::Argv is itself quite small, it represents the
+<P>Though ClearCase::Argv is itself pretty small, it represents the
 <EM>``Grand Unification''</EM> of some of my other ClearCase-related modules.
 The module itself is fully documented in the standard POD format; this
 file is an accompanying overview and chronology.</P>
@@ -39,13 +46,13 @@ file is an accompanying overview and chronology.</P>
 <UL>
 <LI><STRONG><A NAME="item_Interoperability%2FPortability">Interoperability/Portability</A></STRONG><BR>
 
-Using <STRONG>ClearCase::Argv</STRONG> can enhance portability of scripts
-between UNIX and Windows by providing versions of <EM>system</EM>, <EM>exec</EM>,
-and <EM>qx</EM> (aka backquotes) which behave the same on Windows as on UNIX.
-Ok, almost the same. This includes automatically quoting arguments to
+Using <STRONG>ClearCase::Argv</STRONG> can enhance portability of scripts between
+UNIX and Windows by providing versions of <EM>system</EM>, <EM>exec</EM>, and <EM>qx</EM>
+(aka backquotes) which behave the same on Windows as on UNIX.  Ok,
+almost the same. This includes automatically quoting arguments to
 protect them from the <CODE>cmd.exe</CODE> shell, automatically converting
-/-separated pathnames to \, etc. Which can keep a lot of hair out
-of your script.
+/-separated pathnames to \, etc. These features can keep a lot of hair
+out of your script.
 <P></P>
 <LI><STRONG><A NAME="item_Optional_Co%2DProcess_for_Speed">Optional Co-Process for Speed</A></STRONG><BR>
 
@@ -57,6 +64,11 @@ method
 send all subsequent system/exec/qx commands to it instead of forking a
 new child process each time. This can speed up scripts by anywhere
 between 1 (i.e. not at all) and 10 times by my measurements.</P>
+<P></P>
+<LI><STRONG><A NAME="item_CtCmd_Interface_for_Speed">CtCmd Interface for Speed</A></STRONG><BR>
+
+Just as with <STRONG>IPC::ClearTool</STRONG>, ClearCase::Argv can also be told to
+process commands via <STRONG>ClearCase::CtCmd</STRONG>
 <P></P>
 <LI><STRONG><A NAME="item_Convenience_Features">Convenience Features</A></STRONG><BR>
 
@@ -100,7 +112,7 @@ few paradigmatic flaws:</P>
 <UL>
 <LI>
 It didn't work on Windows, where there's no such thing as a fork or
-a true child process.
+a true ``child'' process.
 <P></P>
 <LI>
 The interface was/is strange and a little clunky. Not too surprising
@@ -138,13 +150,13 @@ I won't go into it here, but suffice it to say it provides lots of ways
 to slice and dice an arg vector.  In fact it provides much more parsing
 power than almost anyone would ever need, so while this was its
 original reason for existence it's the least interesting to most.</P>
-<P><STRONG>Argv</STRONG> also has <EM>execution methods</EM>, i.e. you can execute your Argv
-object via <CODE>$obj-</CODE>system()&gt; or <CODE>$obj-</CODE>qx()&gt;. Handling platform
-differences (quoting, pathname separators, etc.) in <STRONG>Argv</STRONG> seemed like
-a natural extension, so I added that. This lead to convenience methods
-like <CODE>$obj-</CODE>autochomp&gt; (should be obvious) and <CODE>$obj-</CODE>qxargs&gt;
-(implements xargs-like behavior to ensure that system limits aren't
-exceeded), etc.</P>
+<P>However, <STRONG>Argv</STRONG> also has <EM>execution methods</EM>, i.e. you can execute
+your Argv object via <CODE>$obj-</CODE>system()&gt; or <CODE>$obj-</CODE>qx()&gt;. Handling
+platform differences (quoting, pathname separators, etc.) in <STRONG>Argv</STRONG>
+seemed like a natural extension, so I added that. This lead to
+convenience methods like <CODE>$obj-</CODE>autochomp&gt; (should be obvious) and
+<CODE>$obj-</CODE>qxargs&gt; (implements xargs-like behavior to ensure that system
+limits aren't exceeded), etc.</P>
 <P>At this point I realized that though the parsing features had a tiny
 constituency, the portability abstraction of the <EM>execution methods</EM>
 might be of interest to more users. So in order to make that more
@@ -161,7 +173,7 @@ new module is called <STRONG>ClearCase::Wrapper</STRONG>.</P>
 <P>
 <H2><A NAME="clearcase::argv">ClearCase::Argv</A></H2>
 <P>Note that <STRONG>Argv</STRONG> itself has nothing to do with ClearCase. So I made a
-tiny subclass of <STRONG>Argv</STRONG> to tune it for use with <STRONG>cleartool</STRONG>, since I
+little subclass of <STRONG>Argv</STRONG> to tune it for use with <STRONG>cleartool</STRONG>, since I
 write a lot of Perl/ClearCase code.  Originally, <STRONG>ClearCase::Argv</STRONG>
 simply extended <STRONG>Argv</STRONG> to prepend the word ``cleartool'' to all arg
 vectors. Thus, while</P>
@@ -174,7 +186,7 @@ vectors. Thus, while</P>
 of the command line is ``cleartool ci'' (or more properly qw(cleartool ci)).</P>
 <P>The <EM>functional interface</EM> of <EM>Argv</EM> is exposed through
 <STRONG>ClearCase::Argv</STRONG>, and it's also extended to support methods called
-<STRONG>ccsystem(), ccexec(), and ccqx()</STRONG> which automatically prepend
+<STRONG>ctsystem(), ctexec(), and ctqx()</STRONG> which automatically prepend
 'cleartool'. E.g.:</P>
 <PRE>
         my @views = ccqx(lsview -s);</PRE>
@@ -192,21 +204,10 @@ Lucent:</P>
 <P>I replied that I didn't but it got me to thinking about whether
 <CODE>ClearCase::Argv</CODE> could be taught to send its commands to a
 co-process.  A few days later I got a chance to play with it and it
-came together with surprising ease! This is the big connection that
+came together with surprising ease. This is the big connection that
 makes it all pretty neat, IMHO, since you get improved speed,
 portability, and ease of use in one package. Without having to make a
 major commitment of rewriting code.</P>
-<P>I should finish, though, by making clear that the ideal scenario
-mentioned here has not gotten heavy testing. ClearCase::Argv (and by
-extension Argv) per se are heavily used and pretty robust, but I
-haven't gotten much chance to exercise the IPC::ClearTool connection.
-All I can say is it's passed the few simple tests I've tried.</P>
-<P>
-<HR>
-<H1><A NAME="release state">RELEASE STATE</A></H1>
-<P>ClearCase::Argv is still considered in ``beta'' state, which I consider
-to mean that it works pretty well but I reserve the right to make
-interface changes. These are getting less likely, though.</P>
 
 </BODY>
 

@@ -8,6 +8,7 @@ examples/CCreport
 examples/fix_eltype
 examples/envp
 examples/functional
+examples/mkattr
 examples/setview
 examples/tarvob
 examples/ctcmd/README

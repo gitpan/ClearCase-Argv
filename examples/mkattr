@@ -1,0 +1,32 @@
+#!/usr/bin/perl
+use ClearCase::Argv 1.11 qw(ctsystem);
+
+## Run as: "perl mkattr <attr-type> <attr-val> <element>"
+
+ClearCase::Argv->attropts;
+ClearCase::Argv->dbglevel(1);
+
+my($attype, $attr, $ccobj) = @ARGV;
+my $atval = qq("$attr");
+
+# Demo: making string-valued attrs in traditional fork/exec style.
+print "OO/Exec\n";
+ClearCase::Argv->mkattr(qw(-replace -nc), $attype, $atval, $ccobj)->system;
+print "Func/Exec\n";
+ctsystem(qw(mkattr -replace -nc), $attype, $atval, $ccobj);
+
+# Demo: making string-valued attrs in IPC::ClearTool style.
+ClearCase::Argv->ipc_cleartool(2);
+print "OO/IPC\n";
+ClearCase::Argv->mkattr(qw(-replace -nc), $attype, $atval, $ccobj)->system;
+print "Func/IPC\n";
+ctsystem(qw(mkattr -replace -nc), $attype, $atval, $ccobj);
+ClearCase::Argv->ipc_cleartool(0);
+
+# Demo: making string-valued attrs in ClearCase::CtCmd style.
+ClearCase::Argv->ctcmd(2);
+print "OO/CtCmd\n";
+ClearCase::Argv->mkattr(qw(-replace -nc), $attype, $atval, $ccobj)->system;
+print "Func/CtCmd\n";
+ctsystem(qw(mkattr -replace -nc), $attype, $atval, $ccobj);
+ClearCase::Argv->ctcmd(0);

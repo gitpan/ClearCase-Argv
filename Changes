@@ -121,3 +121,6 @@ Revision history for Perl extension ClearCase::Argv.
 	  The bug was fixed in CtCmd 1.01; this version simply
 	  indicates that fact by requiring CtCmd 1.01.
 	- Added a :functional tag for completeness.
+
+1.11 Wed May  8 16:49:48 EDT 2002
+	- Modified quoting code to fix bugs in IPC::ClearTool mode.
