@@ -23,11 +23,11 @@ $final += printok(1);
 if (!`cleartool pwd -h`) {
     print qq(
 
-******************************************************************
-ClearCase::Argv is only useable if ClearCase is installed. It was
-unable to figure out the install location so will not continue the
-test.  You can work around this by modifying your PATH appropriately.
-******************************************************************
+************************************************************************
+ClearCase::Argv is only useable when ClearCase is installed.
+ClearCase could not be found so testing will not continue. If you
+really do have ClearCase installed you may need to add it to PATH.
+************************************************************************
 
 );
     exit 0;

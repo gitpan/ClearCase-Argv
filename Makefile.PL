@@ -8,7 +8,7 @@ if (! -e 'README.html' && open(RM, '>README.html')) {
 WriteMakefile(
     'NAME'		=> 'ClearCase::Argv',
     'VERSION_FROM'	=> 'Argv.pm', # finds $VERSION
-    'PREREQ_PM'		=> { Argv => 1.07 },
+    'PREREQ_PM'		=> { Argv => 1.09 },
     'dist'		=> {
 	COMPRESS => 'gzip --force --best',
 	PREOP	 => 'pod2html README --title="ClearCase::Argv README" > $(DISTNAME)-$(VERSION)/README.html',

@@ -4,6 +4,7 @@ MANIFEST
 README
 README.html
 Makefile.PL
+examples/README
 examples/CCreport
 examples/fix_eltype
 examples/envp

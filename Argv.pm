@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 use Argv 1.09;
 
@@ -202,7 +202,7 @@ sub ctcmd {
     if ($@ && defined($level)) {
 	if ($level == 2) {
 	    if ($@ =~ /^(Can't locate [^(]+)/) {
-		$@ = "$1 - continuing in normal mode\n";
+		$@ = "$1\n";
 	    }
 	    warn("Warning: $@");
 	} elsif ($level != 1) {
@@ -317,7 +317,7 @@ sub ipc_cleartool {
     if ($@ || !defined $self->ipc_childsafe(@args)) {
 	if (!defined($level) || $level == 2) {
 	    if ($@ =~ /^(Can't locate [^(]+)/) {
-		$@ = "$1 - continuing in normal mode\n";
+		$@ = "$1\n";
 	    }
 	    warn("Warning: $@");
 	} elsif ($level != 1) {
