@@ -4,6 +4,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     'NAME'		=> 'ClearCase::Argv',
     'VERSION_FROM'	=> 'Argv.pm', # finds $VERSION
+    'PREREQ_PM'		=> { Argv => 0.51 },
     'dist'		=> {
 	COMPRESS => 'gzip --force --best',
 	PREOP	 => 'pod2html README --title="ClearCase::Argv README" > $(DISTNAME)-$(VERSION)/README.html',

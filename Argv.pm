@@ -1,8 +1,8 @@
 package ClearCase::Argv;
 
-$VERSION = '0.21';
+$VERSION = '0.22';
 
-use Argv 0.50 qw(MSWIN);
+use Argv 0.51 qw(MSWIN);
 
 @ISA = qw(Argv);
 @EXPORT_OK = (@Argv::EXPORT_OK, qw(ctsystem ctexec ctqx ctqv));
@@ -10,7 +10,10 @@ use Argv 0.50 qw(MSWIN);
 use strict;
 
 # For programming purposes we can't allow per-user preferences.
-$ENV{CLEARCASE_PROFILE} = '/Over/Ridden/by/ClearCase/Argv';
+if ($ENV{CLEARCASE_PROFILE}) {
+    $ENV{_CLEARCASE_PROFILE} = $ENV{CLEARCASE_PROFILE};
+    delete $ENV{CLEARCASE_PROFILE};
+}
 
 # Allow EV's setting class data in the derived class to override
 # the base class's defaults.There's probably a better way.
@@ -45,16 +48,16 @@ if (!MSWIN && ($< == 0 || $< != $>)) {
     }
 }
 
-# Class method to specify the location of 'cleartool'.
-sub cleartool { (undef, $ct) = @_ }
+# Class method to get/set the location of 'cleartool'.
+sub cleartool { (undef, $ct) = @_ if $_[1]; $ct }
 
 # Change a prog value of q(ls) to qw(cleartool ls). If the value is
 # already an array or array ref leave it alone. Same thing if the 1st
-# word contains /cleartool/.
+# word contains /cleartool/ or is an absolute path.
 sub prog {
     my $self = shift;
     my $prg = shift;
-    if (@_ || ref($prg) || $prg =~ /cleartool/) {
+    if (@_ || ref($prg) || $prg =~ m%^/|cleartool%) {
 	return $self->SUPER::prog($prg, @_);
     } else {
 	return $self->SUPER::prog([$ct, $prg], @_);
