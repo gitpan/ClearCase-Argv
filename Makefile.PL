@@ -1,0 +1,14 @@
+use ExtUtils::MakeMaker;
+# See lib/ExtUtils/MakeMaker.pm for details of how to influence
+# the contents of the Makefile that is written.
+WriteMakefile(
+    'NAME'		=> 'ClearCase::Argv',
+    'VERSION_FROM'	=> 'Argv.pm', # finds $VERSION
+    'dist'		=> {
+	COMPRESS => 'gzip --force --best',
+	PREOP	 => 'pod2html README --title="ClearCase::Argv README" > $(DISTNAME)-$(VERSION)/README.html',
+	POSTOP	 => 'rm -f pod2html-*cache',
+	TAR	 => 'gtar',
+	TARFLAGS => '--mode=u+w -cvf',
+    },
+);

@@ -1,0 +1,64 @@
+#!/usr/local/bin/perl
+
+## This script goes through all known VOB's, locking them and backing them
+## up with GNU tar into compressed archive files in a place of your
+## choosing. Or specific VOB tags can be given on the command line.
+## It deliberately does not back up the c/cdft area as this is large
+## and recoverable. It deals gracefully with the case where d/ddft or
+## s/sdft are symlinks. It requires that GNU tar be available on PATH
+## as 'gtar'. Also 'gzip'.
+
+use ClearCase::Argv;
+
+Argv->stdout(0);
+Argv->stdopts;
+
+use Getopt::Long;
+use vars qw(%Opt);
+GetOptions(\%Opt, qw(backupdir=s comment=s z));
+
+chomp(@ARGV = ClearCase::Argv->new(qw(lsvob -s))->noexec(0)->qx) if !@ARGV;
+my $lsvob = ClearCase::Argv->new('lsvob')->noexec(0)->dbglevel(0)->autochomp(1);
+
+my $rc = 0;
+
+my $lock = ClearCase::Argv->new('lock');
+$lock->opts('-c', $Opt{comment}) if $Opt{comment};
+my $unlock = ClearCase::Argv->new('unlock');
+my $tar = Argv->new->stdout(1);
+
+my @backups;
+
+Argv->dbglevel(1);
+
+for my $tag (@ARGV) {
+    my $stg = $lsvob->args($tag)->qx;
+    $stg =~ s%^\S*\s+\S+\s+(\S+)/[^/]+\.vbs\s+.*%$1%;
+    if (!chdir($stg)) {
+	warn "$stg: $!";
+	next;
+    } else {
+	warn "\n= ", scalar(localtime), "\n+ cd $stg\n";
+    }
+    my $d = $Opt{backupdir} || $stg;
+    (my $v = $tag) =~ s%^\W+%%;
+    (my $b = $v) =~ s%^vobs_%%;
+    next if $lock->args("vob:$tag")->system;
+    unlink("$d/$v.tar", "$d/$v.tar.gz") if !$tar->noexec;
+    my $cmd = "gtar -cf $d/$v.tar $b.vbs $b.vbs/d/ddft/* $b.vbs/s/sdft/*";
+    $rc++ if $tar->args($cmd)->system;
+    $rc++ if $unlock->args("vob:$tag")->system;
+    push(@backups, "$v.tar");
+}
+warn "\n= ", scalar(localtime), "\n";
+
+if ($Opt{z} && @backups) {
+    if ($Opt{backupdir}) {
+	die "$Opt{backupdir}: $!" if !chdir($Opt{backupdir});
+	warn "\n+ cd $Opt{backupdir}\n";
+    }
+    $rc++ if Argv->new(qw(gzip --force), @backups)->system;
+    warn "\n= ", scalar(localtime), "\n";
+}
+
+exit $rc;
