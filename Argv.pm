@@ -1,13 +1,14 @@
 package ClearCase::Argv;
 
-$VERSION = '1.09';
+$VERSION = '1.10';
 
 use Argv 1.07;
 
 use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 
 @ISA = qw(Argv);
-@EXPORT_OK = (@Argv::EXPORT_OK, qw(ctsystem ctexec ctqx ctqv));
+%EXPORT_TAGS = ( 'functional' => [ qw(ctsystem ctexec ctqx ctqv) ] );
+@EXPORT_OK = (@Argv::EXPORT_OK, @{$EXPORT_TAGS{functional}});
 
 use strict;
 
@@ -115,14 +116,14 @@ sub system {
 	$errplace = -1 if $efd == 0;
     }
     $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
-    my $ct = ClearCase::CtCmd->new(outfunc=>$outplace, errfunc=>$errplace);
+    my $ctc = ClearCase::CtCmd->new(outfunc=>$outplace, errfunc=>$errplace);
     if ($envp) {
 	local %ENV = %$envp;
-	$ct->exec(@cmd);
+	$ctc->exec(@cmd);
     } else {
-	$ct->exec(@cmd);
+	$ctc->exec(@cmd);
     }
-    my $rc = $ct->status;
+    my $rc = $ctc->status;
     $? = $rc;
     print STDERR "+ (\$? == $?)\n" if $dbg > 1;
     $self->fail($self->syfail) if $rc;
@@ -150,13 +151,13 @@ sub qx {
 	return 0;
     }
     $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
-    my $ct = ClearCase::CtCmd->new;
+    my $ctc = ClearCase::CtCmd->new;
     my($rc, $data, $errors);
     if ($envp) {
 	local %ENV = %$envp;
-	($rc, $data, $errors) = $ct->exec(@cmd);
+	($rc, $data, $errors) = $ctc->exec(@cmd);
     } else {
-	($rc, $data, $errors) = $ct->exec(@cmd);
+	($rc, $data, $errors) = $ctc->exec(@cmd);
     }
     $? = $rc;
     print STDERR $errors if $efd == 2;
@@ -212,6 +213,7 @@ sub ctcmd {
     no strict 'refs';		# because $self may be a symbolic hash ref
     if (defined($level)) {
 	if ($level) {
+	    ClearCase::CtCmd->VERSION(1.01);
 	    if ($self->ipc_cleartool) {
 		$self->warning("cannot use IPC::ClearTool and ClearCase::CtCmd together");
 		return 0;
@@ -236,7 +238,7 @@ sub ctcmd {
     }
 }
 
-# Starts or stops a cleartool coprocess.
+# Starts or stops an IPC::ClearTool coprocess.
 sub ipc_cleartool {
     my $self = shift;	# this might be an instance or a classname
     my $level = shift;
@@ -620,6 +622,10 @@ specify 'cleartool' as the program, whereas C<ctsystem()> and friends
 handle that. Also, the I<qx> operator cannot be overridden so we use
 I<qv()> instead.
 
+These interfaces may also be imported via the I<:functional> tag:
+
+	use ClearCase::Argv ':functional';
+
 =head1 CAREFUL PROGRAMMERS WANTED
 
 If you're the kind of programmer who tends to execute whole strings
@@ -639,13 +645,13 @@ both class and instance uses. It's done this way to allow the following
 locutions:
 
     ClearCase::Argv->stdout(0);	# turn off stdout for all objects
-    $obj->stdout(0);		# turn off stdout for this object, forever
-    $obj->stdout(0)->system;	# suppress stdout, this time only
+    $obj1->stdout(0);		# turn off stdout for this object, forever
+    $obj2->stdout(0)->system;	# suppress stdout, this time only
 
 This allows you to set up an object with various sticky attributes and
 keep it around, executing it at will and overriding other attrs
 temporarily. In the example below, note that another way of setting
-sticky attrs is shown:
+sticky attrs is illustrated:
 
     my $obj = ClearCase::Argv->new({autofail=>1, autochomp=>1});
     my $view = $obj->argv('pwv -s')->qx;

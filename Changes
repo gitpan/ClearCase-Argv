@@ -114,3 +114,10 @@ Revision history for Perl extension ClearCase::Argv.
 	- Fixed a versioning typo. The previous version was incorrectly
 	  requiring a version of 'Argv' (1.08) which wasn't yet
 	  released. This was just a finger fumble.
+
+1.10 Sun Apr 21 12:22:31 EDT 2002
+	- The integration of ClearCase::Argv and ClearCase::CtCmd
+	  didn't work with ClearCase::CtCmd 1.00 due to a bug.
+	  The bug was fixed in CtCmd 1.01; this version simply
+	  indicates that fact by requiring CtCmd 1.01.
+	- Added a :functional tag for completeness.
