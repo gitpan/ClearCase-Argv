@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '0.24';
+$VERSION = '0.25';
 
 use Argv 0.53 qw(MSWIN);
 

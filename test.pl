@@ -237,9 +237,9 @@ $final += printok(1);
 
 print qq(
 ************************************************************************
-And finally, remember that ClearCase::Argv is merely a simple
-subclass of Argv which tunes it for ClearCase. See Argv's PODs
-for full documentation, and see Argv's test script(s) for
-more demo material. We finish by printing the pass/fail stats:
+And finally, remember that ClearCase::Argv is merely a subclass of Argv
+which tunes it for ClearCase. See Argv's PODs for full documentation,
+and see Argv's test script(s) for more demo material. We finish by
+printing the pass/fail stats:
 ************************************************************************
 );

@@ -5,7 +5,7 @@
 ## and Windows, it will give errors on Windows because that's
 ## what the CC developers chose to do for some reason.
 
-use ClearCase::Argv qw(ccsystem ccqx);
+use ClearCase::Argv qw(ctsystem ctqx);
 
 ## Setting a view requires that you be in IPC::ClearTool mode.
 ClearCase::Argv->ipc_cleartool;
@@ -28,8 +28,8 @@ $ct->argv('pwv -s')->system;
 print "\n*Similar to above but using the functional interface ...\n";
 ClearCase::Argv->dbglevel(0);
 for my $view (reverse @views) {
-    ccsystem('setview', $view);
-    my $cwv = ccqx('pwv -s');
+    ctsystem('setview', $view);
+    my $cwv = ctqx('pwv -s');
     chomp $cwv;
     print "Setting cleartool process into view '$cwv'\n";
 }

@@ -70,5 +70,9 @@ Revision history for Perl extension ClearCase::Argv.
 
 0.24 Fri Aug  4 14:37:07 EDT 2000
 	- Changed the test script to abort more gracefully (exit 0)
-	  if not run with a VOB.
+	  if not run within a VOB.
 	- Require Argv 0.53 (no particular reason).
+
+0.25 Sat Dec  9 23:16:25 EST 2000
+	- Scripts in ./examples had drifted out of alignment with module,
+	  as reported by Martina Riedel.
