@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.17';
+$VERSION = '1.18';
 
 use Argv 1.09;
 
@@ -798,7 +798,7 @@ perl(1), Argv, IPC::ClearTool, IPC::ChildSafe
 
 =head1 AUTHOR
 
-David Boyce <dsb@boyski.com>
+David Boyce <dsbperl@cleartool.com>
 
 =head1 COPYRIGHT
 
