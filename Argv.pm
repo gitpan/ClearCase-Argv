@@ -1,12 +1,12 @@
 package ClearCase::Argv;
 
-use Argv 0.46 qw(MSWIN);
+use Argv 0.47 qw(MSWIN);
 
 use strict;
 use vars qw($VERSION @ISA @EXPORT_OK);
 @ISA = qw(Argv);
 @EXPORT_OK = (@Argv::EXPORT_OK, qw(ccsystem ccexec ccqx ccqv));
-$VERSION = '0.17';
+$VERSION = '0.18';
 
 # For programming purposes we can't allow per-user preferences.
 $ENV{CLEARCASE_PROFILE} = '/overridden/by/ClearCase/Argv';
@@ -18,31 +18,38 @@ for (grep !/^_/, keys %Argv::Argv) {
     $Argv::Argv{$_} = $ENV{$ev} if defined $ENV{$ev};
 }
 
+my $ct = 'cleartool';
+
 # Attempt to find the definitive ClearCase bin path at startup. Don't
 # try excruciatingly hard - it would take unwarranted time. And don't
 # do so at all if running setuid or as root. If this doesn't work,
-# you can set the path explicitly via the 'cleartool' class method.
-if (MSWIN || ($< && ($< == $>))) {
+# the path can be set explicitly via the 'cleartool' class method.
+if (!MSWIN && ($< == 0 || $< != $>)) {
+    $ct = '/usr/atria/bin/cleartool';	# running setuid or as root
+} elsif ($ENV{PATH} !~ m%\W(atria|clearcase)\Wbin\b%i) {
     if (!MSWIN) {
-	$ENV{PATH} .= ':/usr/atria/bin'
-		    if -d '/usr/atria/bin' && $ENV{PATH} !~ m%/atria/bin%;
+	my $abin = $ENV{ATRIAHOME} ? "$ENV{ATRIAHOME}/bin" : '/usr/atria/bin';
+	$ENV{PATH} .= ":$abin" if -d $abin && $ENV{PATH} !~ m%/atria/bin%;
     } else {
-	for (   'C:/Program Files/Rational/ClearCase/bin',
+	for (   "$ENV{ATRIAHOME}/bin",
+		'C:/Program Files/Rational/ClearCase/bin',
 		'D:/Program Files/Rational/ClearCase/bin',
 		'C:/atria/bin',
 		'D:/atria/bin') {
-	    if (-d $_) { $ENV{PATH} .= ";$_"; last }
+	    if (-d $_ && $ENV{PATH} !~ m%$_%) {
+		$ENV{PATH} .= ";$_";
+		last;
+	    }
 	}
     }
 }
 
 # Class method to specify the location of 'cleartool'.
-my $ct = 'cleartool';
 sub cleartool { (undef, $ct) = @_ }
 
 # Change a prog value of q(ls) to qw(cleartool ls). If the value is
-# already an array or array ref leave it alone. Or if the 1st word
-# contains /cleartool/.
+# already an array or array ref leave it alone. Same thing if the 1st
+# word contains /cleartool/.
 sub prog {
     my $self = shift;
     my $prg = shift;
