@@ -56,10 +56,9 @@ out of your script.
 <P></P>
 <LI><STRONG><A NAME="item_Optional_Co%2DProcess_for_Speed">Optional Co-Process for Speed</A></STRONG><BR>
 
-For any script which uses ClearCase::Argv, the 'ipc_cleartool' class
-method
+For any script which uses ClearCase::Argv, the 'ipc' class method
 <PRE>
-        ClearCase::Argv-&gt;ipc_cleartool;</PRE>
+        ClearCase::Argv-&gt;ipc;</PRE>
 <P>will start <STRONG>cleartool</STRONG> as an <STRONG>IPC::ClearTool</STRONG> co-process and arrange to
 send all subsequent system/exec/qx commands to it instead of forking a
 new child process each time. This can speed up scripts by anywhere

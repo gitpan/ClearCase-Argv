@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.12';
+$VERSION = '1.14';
 
 use Argv 1.09;
 
@@ -20,8 +20,8 @@ if ($ENV{CLEARCASE_PROFILE}) {
     delete $ENV{CLEARCASE_PROFILE};
 }
 
-# Allow EV's setting class data in the derived class to override
-# the base class's defaults.There's probably a better way.
+# Allow EV's setting class data in the derived class to override the
+# base class's defaults.There's probably a better way to code this.
 for (grep !/^_/, keys %Argv::Argv) {
     (my $ev = uc(join('_', __PACKAGE__, $_))) =~ s%::%_%g;
     $Argv::Argv{$_} = $ENV{$ev} if defined $ENV{$ev};
@@ -57,8 +57,8 @@ if (!MSWIN && ($< == 0 || $< != $>)) {
 # Class method to get/set the location of 'cleartool'.
 sub find_cleartool { (undef, $ct) = @_ if $_[1]; $ct }
 
-# Override of base-class method to change a prog value of 'ls' into
-# qw(cleartool ls). If the value is already an array or array ref
+# Override of base-class method to change a prog value of 'foo' into
+# qw(cleartool foo). If the value is already an array or array ref
 # leave it alone. Same thing if the 1st word contains /cleartool/
 # or is an absolute path.
 sub prog {
@@ -200,23 +200,43 @@ sub ctcmd {
     my $level = shift;
     eval { require ClearCase::CtCmd };
     if ($@ && defined($level)) {
-	if ($level == 2) {
-	    if ($@ =~ /^(Can't locate [^(]+)/) {
-		$@ = "$1\n";
-	    }
-	    warn("Warning: $@");
-	} elsif ($level != 1) {
-	    die("Error: $@");
+	my $msg = $@;
+	if ($level == 2 && $msg =~ m%^(Can't locate \S+)%) {
+	    $msg = $1;
+	} elsif ($level > 2) {
+	    die("Error: $msg");
 	}
-	return undef;
+	if ($level == 1 || $level == 2) {
+	    # On Windows, if the real ClearCase::CtCmd is missing hack
+	    # in our own version that uses CAL directly.
+	    if (MSWIN) {
+		eval { require Win32::OLE };
+		if ($@) {
+		    warn("Warning: $msg\n") if $level == 2;
+		    return undef;
+		} else {
+		    warn("Warning: $msg, using CAL instead\n") if $level == 2;
+		    *ClearCase::CtCmd::new = \&_ctcmd_new;
+		    *ClearCase::CtCmd::status = \&_ctcmd_status;
+		    *ClearCase::CtCmd::exec = \&_ctcmd_cmd2cal;
+		    *ClearCase::CtCmd::cleartool = \&_ctcmd_cmd2cal;
+		    $ClearCase::CtCmd::VERSION = '1.01';
+		    Win32::OLE->Option(Warn => 0);
+		}
+	    } else {
+		warn("Warning: $msg, using fork/exec instead\n") if $level == 2;
+		return undef;
+	    }
+	} else {
+	    return undef;
+	}
     }
     no strict 'refs';		# because $self may be a symbolic hash ref
     if (defined($level)) {
 	if ($level) {
-	    ClearCase::CtCmd->VERSION(1.01);
-	    if ($self->ipc_cleartool) {
-		$self->warning("cannot use IPC::ClearTool and ClearCase::CtCmd together");
-		return 0;
+	    ClearCase::CtCmd->VERSION(1.01) if $ClearCase::CtCmd::VERSION;
+	    if ($self->ipc) {
+		$self->ipc(0);	# shut the ipc down
 	    }
 	    $self->{CCAV_CTCMD} = 1;
 	    # If setting a class attribute, export it to the
@@ -238,8 +258,66 @@ sub ctcmd {
     }
 }
 
+sub _ctcmd_new {
+    my $object = shift;
+    my $this = {};
+    %$this = @_;
+    bless $this, $object;
+    $this->{'status'} = 0;
+    return $this;
+}
+
+sub _ctcmd_status {
+    my $this = shift;
+    return $this->{'status'}
+}
+
+sub _ctcmd_cmd2cal {
+    my $self = ref($_[0]) ? shift : undef;
+    # It may make more sense to stash a copy of this object rather than
+    # recreate it each time.
+    my $ct = Win32::OLE->new('ClearCase.ClearTool');
+    # Turn list cmds into a quoted string.
+    my $cmd = (@_ == 1) ? $_[0] : join(' ', map {"'$_'"} @_);
+    # Send the actual command to CAL and get stdout returned.
+    my $out = $ct->CmdExec($cmd);
+    # Must reap the return code first, then get stderr IFF retcode != 0.
+    my $rc = int Win32::OLE->LastError;
+    my $err = $rc ? Win32::OLE->LastError . "\n" : '';
+    # Massage the output from CmdExec into cmdline-style format ...
+    # Turn the literal CRLF sequence into \n for subsequent chomp/splits.
+    for ($out, $err) {
+	s/\015?\012/\n/g if $_;
+    }
+    # Strip the OLE verbosity from any error messages.
+    if ($err) {
+	$err =~ s%^OLE\s+exception.*%%;
+	$err =~ s%^\s*%%s;
+	$err =~ s%\s*Win32::OLE.*%\n%s;
+    }
+    $self->{'status'} = $rc if $self;
+    my @results = $rc;
+    if ($self && exists($self->{outfunc}) && ($self->{outfunc} == 0)) {
+	print STDOUT $out;
+    } else {
+	push(@results, $out);
+    }
+    if ($self && exists($self->{errfunc}) && ($self->{errfunc} == 0)) {
+	print STDERR $err;
+    } else {
+	push(@results, $err);
+    }
+    if (wantarray) {
+	return @results;
+    } else {
+	$? = $rc if $rc;
+	print STDERR $results[2] if defined($results[2]);
+	return $results[1];
+    }
+}
+
 # Starts or stops an IPC::ClearTool coprocess.
-sub ipc_cleartool {
+sub ipc {
     my $self = shift;	# this might be an instance or a classname
     my $level = shift;
     if (defined($level) && !$level) {
@@ -248,8 +326,7 @@ sub ipc_cleartool {
 	return $self->ipc_childsafe; # return the active ChildSafe object
     }
     if ($self->ctcmd) {
-	$self->warning("cannot use IPC::ClearTool and ClearCase::CtCmd together");
-	return 0;
+	$self->ctcmd(0);	# shut down the CtCmd connection
     }
     my $chk = sub { return int grep /Error:\s/, @{$_[0]} };
     my %params = ( CHK => $chk, QUIT => 'exit' );
@@ -315,17 +392,21 @@ sub ipc_cleartool {
 	}
     }
     if ($@ || !defined $self->ipc_childsafe(@args)) {
-	if (!defined($level) || $level == 2) {
-	    if ($@ =~ /^(Can't locate [^(]+)/) {
-		$@ = "$1\n";
+	if (!defined($level)) {
+	    warn("Warning: $@\n");
+	} elsif ($level == 1 || $level == 2) {
+	    if ($@ =~ m%^(Can't locate \S+)%) {
+		$@ = $1;
 	    }
-	    warn("Warning: $@");
-	} elsif ($level != 1) {
+	    warn("Warning: $@, using CtCmd instead\n") if $level == 2;
+	    return $self->ctcmd($level);
+	} else {
 	    die("Error: $@");
 	}
     }
     return $self;
 }
+*ipc_cleartool = \&ipc;
 
 sub _read_only {
     my $self = shift;
@@ -382,7 +463,7 @@ sub quote {
 
 # Hack - allow a comment to be registered here. The next command will
 # see it with -c "comment" if in regular mode or -cq and reading the
-# comment from stdin if in ipc_cleartool mode.
+# comment from stdin if in ->ipc mode.
 sub comment {
     my $self = shift;
     my $cmnt = shift;
@@ -397,7 +478,7 @@ sub comment {
     return $self;
 }
 
-# Add -/ipc_cleartool and -/ctcmd to list of supported attr-flags.
+# Add -/ipc and -/ctcmd to list of supported attr-flags.
 sub attropts {
     my $self = shift;
     return $self->SUPER::attropts(@_, qw(ipc_cleartool ctcmd));
@@ -454,13 +535,13 @@ the standard technique of executing cleartool or via the
 ClearCase::CtCmd or IPC::ClearTool modules (see) by flipping a switch.
 
 To that end it provides a couple of special methods I<C<ctcmd>> and
-I<C<ipc_cleartool>>. The C<ctcmd> method can be used to cause cleartool
-commands to be run in the current process space using
-I<ClearCase::CtCmd>.  Similarly, C<ipc_cleartool> will send commands to
-a cleartool co-process using the I<IPC::ClearTool> module. The
-ClearCase::CtCmd and IPC::ClearTool modules must be installed for these
-methods to work. See their docs for details on what they do, and see
-I<ALTERNATE EXECUTION INTERFACES> below for how to invoke them.
+I<C<ipc>>. The C<ctcmd> method can be used to cause cleartool commands
+to be run in the current process space using I<ClearCase::CtCmd>.
+Similarly, C<ipc> will send commands to a cleartool co-process using
+the I<IPC::ClearTool> module.  See the documentation of these modules
+for details on what they do, and see I<ALTERNATE EXECUTION INTERFACES>
+below for how to invoke them. Sample scripts are packaged with
+I<ClearCase::Argv> in ./examples.
 
 As I<ClearCase::Argv is in other ways identical to its base class>, see
 C<perldoc Argv> for substantial further documentation.
@@ -556,19 +637,21 @@ cleartool itself.
 
 When called with no argument it returns a boolean indicating whether
 I<CtCmd mode> is on or off. When called with a numerical argument, it
-sets the CtCmd mode as follows. If the argument is 0, CtCmd mode is
-turned off; subsequent commands are sent to real cleartool via the
+sets the CtCmd mode as follows: if the argument is 0, CtCmd mode is
+turned off and subsequent commands are sent to real cleartool via the
 standard execution interface.  With an argument of 1, it attempts to
-use CtCmd mode but if CtCmd fails to load for any reason it will
-silently continue in standard mode.  With an argument of 2 the behavior
-is the same but a warning is printed on CtCmd failure.  With an
-argument of 3 the warning becomes a fatal error.
+use CtCmd mode. If CtCmd fails to load for any reason it will
+(silently) run commands via CAL instead.  With an argument of 2 the
+behavior is the same but a warning ("CtCmd not found - using CAL
+instead") is printed.  With an argument of 3 the warning becomes a
+fatal error, thus using CtCmd I<only> if the compiled version is
+installed.
 
 =head2 Examples
 
-    # Use CtCmd if available, else continue silently
+    # Use CtCmd if available, else continue silently using CAL
     ClearCase::Argv->ctcmd(1);
-    # Use CtCmd if available, else print warning and continue
+    # Use CtCmd if available, else print warning and use CAL
     ClearCase::Argv->ctcmd(2);
     # Use CtCmd if available, else die with error msg
     ClearCase::Argv->ctcmd(3);
@@ -579,10 +662,11 @@ Typically C<-E<gt>ctcmd> will be used as a class method to specify a
 place for all cleartool commands to be sent. However, it may also be
 invoked on an object to associate just that instance with CtCmd.
 
-These rules apply to IPC::ClearTool the same way but with a different
-method name, e.g.:
+A similar sequence is observed for IPC::ClearTool except for the
+different method name, e.g.:
 
-    ClearCase::Argv->ipc_cleartool(1);
+    # Use IPC::ClearTool if available, else print warning and use CAL
+    ClearCase::Argv->ipc(1);
 
 Note: you can tell which mode is in use by turning on the I<dbglevel>
 attribute. Verbosity styles are as follows:

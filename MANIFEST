@@ -13,8 +13,11 @@ examples/mkattr
 examples/setview
 examples/tarvob
 examples/ctcmd/README
-examples/ctcmd/func.pl
+examples/ctcmd/func1.pl
+examples/ctcmd/func2.pl
 examples/ctcmd/oo1.pl
 examples/ctcmd/oo2.pl
-examples/ctcmd/ccargv.pl
+examples/ctcmd/ccargv1.pl
+examples/ctcmd/ccargv2.pl
+examples/ctcmd/ccargv3.pl
 test.pl

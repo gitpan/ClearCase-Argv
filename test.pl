@@ -194,13 +194,13 @@ print "FORK : ", timestr(timediff(new Benchmark, $t1), 'noc'), "\n";
 $final += printok($rc == 0);
 
 # See if the coprocess module is available and try it if so.
-if (ClearCase::Argv->ipc_cleartool(1)) {
+if (ClearCase::Argv->ipc(1)) {
     my $t2 = new Benchmark;
     my $fast = ClearCase::Argv->new('lsview', ['-l']);
     $rc = 0;
     for (1..$reps) { $sum2 += unpack("%32C*", $fast->qx); $rc += $? }
     print "IPC  : ", timestr(timediff(new Benchmark, $t2), 'noc'), "\n";
-    ClearCase::Argv->ipc_cleartool(0);		# turn off use of coprocess
+    ClearCase::Argv->ipc(0);		# turn off use of coprocess
     $final += printok($rc == 0);
     warn "Warning: checksums differ between FORK and IPC runs!"
 						    if printok($sum1 == $sum2);

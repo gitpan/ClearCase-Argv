@@ -129,3 +129,12 @@ Revision history for Perl extension ClearCase::Argv.
 	- Added a README for example section
 	- Corrected PREREQ_PM to match actual requirements.
 	- Functionally identical to 1.11.
+
+1.14 Tue May 21 13:29:20 EDT 2002
+	- Added new sample scripts to ./examples/ctcmd area
+	- Renamed ->ipc_cleartool() to ->ipc(), leaving an alias
+	- Allow automatic switching between ipc and ctcmd modes
+	- NEW FEATURE: incorporates ClearCase::CtCmd fallback
+	  functionality. If CtCmd is not installed on Windows,
+	  ClearCase::Argv is now capable of sending commands
+	  directly to CAL. See POD for details.

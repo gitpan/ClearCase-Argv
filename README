@@ -28,10 +28,9 @@ out of your script.
 
 =item * Optional Co-Process for Speed
 
-For any script which uses ClearCase::Argv, the 'ipc_cleartool' class
-method
+For any script which uses ClearCase::Argv, the 'ipc' class method
 
-	ClearCase::Argv->ipc_cleartool;
+	ClearCase::Argv->ipc;
 
 will start B<cleartool> as an B<IPC::ClearTool> co-process and arrange to
 send all subsequent system/exec/qx commands to it instead of forking a
