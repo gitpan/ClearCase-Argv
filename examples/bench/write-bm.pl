@@ -1,6 +1,8 @@
 use Benchmark;
 use ClearCase::Argv;
 
+use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
+
 ClearCase::Argv->attropts;
 
 # Alert the user if a trigger may be skewing the benchmark.
@@ -28,7 +30,7 @@ sub writeops {
     printf "%-6s: %s\n", $style, timestr(timediff(new Benchmark, $t1), 'noc');
 }
 
-my @elems = @ARGV;
+my @elems = map { MSWIN ? glob : $_ } @ARGV;
 
 printf "Benchmarking writes with %d new elements ...\n", scalar(@elems);
 
@@ -39,5 +41,5 @@ ClearCase::Argv->ctcmd(2);
 writeops(@elems);
 
 # Benchmark IPC::ClearTool mode - turned off by default.
-#ClearCase::Argv->ipc(2);
-#writeops(@elems);
+ClearCase::Argv->ipc(2);
+writeops(@elems);

@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.15';
+$VERSION = '1.16';
 
 use Argv 1.09;
 

@@ -1,6 +1,8 @@
 use Benchmark;
 use ClearCase::Argv;
 
+use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
+
 ClearCase::Argv->attropts;
 
 # Alert the user if a trigger may be skewing the benchmark.
@@ -20,7 +22,7 @@ sub readops {
     printf "%-6s: %s\n", $style, timestr(timediff(new Benchmark, $t1), 'noc');
 }
 
-my @elems = grep { ! -l } @ARGV;
+my @elems = grep { ! -l } map { MSWIN ? glob : $_ } @ARGV;
 
 printf "Benchmarking reads with %d elements ...\n", scalar(@elems);
 
