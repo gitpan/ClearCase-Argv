@@ -6,11 +6,14 @@ README.html
 Makefile.PL
 examples/README
 examples/CCreport
+examples/bmccug
 examples/fix_eltype
 examples/envp
 examples/functional
 examples/mkattr
 examples/setview
+examples/simple
+examples/simplest
 examples/tarvob
 examples/ctcmd/README
 examples/ctcmd/func1.pl
@@ -20,6 +23,7 @@ examples/ctcmd/oo2.pl
 examples/ctcmd/ccargv1.pl
 examples/ctcmd/ccargv2.pl
 examples/ctcmd/ccargv3.pl
+examples/ctcmd/ccargv4.pl
 examples/bench/README
 examples/bench/read-bm.pl
 examples/bench/write-bm.pl

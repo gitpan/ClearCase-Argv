@@ -7,12 +7,13 @@ users, etc., all configurable.
 
 - tarvob: Another real tool though much less ambitious. This is a
 standard vob-backup script implemented with ClearCase::Argv. Locks
-vobs, tars, unlocks, etc.
+vobs, tars, unlocks, etc. Don't use this with production vobs without
+careful testing and full understanding of what it does.
 
 - fix_eltype: A real script that brings element types into line with
 what "cleartool file" thinks they should be.
 
-- mkattr: An example of how to do set string-valued attributes which
+- mkattr: An example of how to set string-valued attributes which
 tends to be the toughest quoting job. All these examples work on both
 Unix and Windows.
 

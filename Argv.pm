@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.16';
+$VERSION = '1.17';
 
 use Argv 1.09;
 
@@ -698,6 +698,15 @@ attribute. Verbosity styles are as follows:
     + cleartool pwv		# standard (fork/exec)
     +> pwv			# CtCmd
     -->> pwv			# IPC::ClearTool
+
+A final note on these two: turning on one mode will automatically, and
+silently, turn off the other. I.e. the sequence
+
+    ClearCase::Argv->ipc(2);
+    ClearCase::Argv->ctcmd(2);
+
+will not throw any exceptions and will leave you in CtCmd mode. The
+coprocess will be shut down.
 
 =head1 FUNCTIONAL INTERFACE
 
