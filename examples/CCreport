@@ -1,6 +1,4 @@
-:
-eval 'exec /tools/$MACHINE/bin/perl -S $0 ${1+"$@"}'
-    if 0;
+#! /usr/local/bin/perl
 
 require 5.004;
 
@@ -28,6 +26,7 @@ Flags: [default]
    -mail	Send results via email [stdout]
    -empty	Send mail even for projects with no changes [skip]
    -branch br   Show changes on specified branches [all]
+   -cview	Limit search to versions visible in the working view
    -name <patt> Limit search to elements matching <pattern>.
    -to addr,...	Specify mail distribution [\$LOGNAME]
    -inhtml      Output to be embedded in existing HTML; skip headers/footers
@@ -53,7 +52,7 @@ $0 = join('/', cwd(), $0) unless $0 =~ m%^[/\\]%;
 
 my %opt;
 GetOptions(\%opt, qw(auto avobs before=s branches|brtypes=s@ name=s
-		    domain=s empty filter=s
+		    cview domain=s empty filter=s
 		    fhref=s down=s help inhtml mail! plain report=s
 		    since=s to=s type=s@ user=s@ view=s)) || exit 2;
 
@@ -125,7 +124,7 @@ if ($opt{auto}) {
 }
 
 # Determine some "ct find" predicates for time slice and user.
-# We # want all changes since this date, default to 'midnight yesterday'
+# We want all changes since this date, default to 'midnight yesterday'
 my $Since = $opt{since} || -1;
 if ($Since =~ /^(?:now)?[+-]\d+$/i) {
    $Since =~ s%^now%%i;
@@ -211,7 +210,12 @@ for my $dir (@ARGV) {
     my $find;
     my @sel = qw(. -all);
     push(@sel, '-name', qq("$opt{name}")) if $opt{name};
-    push(@sel, '-type', $opt{type}->[0]) if $opt{type} && @{$opt{type}} == 1;
+    if ($opt{type}) {
+	push(@sel, '-type', $opt{type}->[0]);
+    } else {
+	push(@sel, qw(-type fd));
+    }
+    push(@sel, '-cview') if $opt{cview};
     if ($branches[0] eq '(ALL)') {
 	$find = "find @sel -ver '$Pred' -print";
     } else {
@@ -335,6 +339,7 @@ for my $dir (@ARGV) {
 		next;
 	    }
 	    my @to = split /,/, $opt{to} || $ENV{LOGNAME};
+	    for (@to) { $_ .= "\@$opt{domain}" if $opt{domain} && !/@/ }
 	    my $smtp = Net::SMTP->new('mailhost');
 	    die "$prog: Net::SMTP->new failed" unless $smtp;
 	    $smtp->debug(1) if $ct->dbglevel > 1;
@@ -358,7 +363,12 @@ for my $dir (@ARGV) {
     # can easily get into a real browser to navigate the changes.
     if ($opt{mail} && !$opt{fhref}) {
 	push(@Html, "<P></P>\n");
-	push(@Html, qq(Changes on ClearCase branch <I>@branches</I> ));
+	if ($opt{cview}) {
+	    my $cwv = $ct->pwv(['-s'])->qx;
+	    push(@Html, qq(Changes visible in ClearCase view <I>cwv</I> ));
+	} else {
+	    push(@Html, qq(Changes on ClearCase branch <I>@branches</I> ));
+	}
 	push(@Html, qq(since <I>$Since</I>));
 	push(@Html, qq( and before <I>$Before</I>));
 	if (@ARGV > 1) {
@@ -450,6 +460,7 @@ for my $dir (@ARGV) {
     if ($opt{mail}) {
 	my $ttype = $opt{plain} ? 'plain' : 'html';
 	my @to = split /,/, $opt{to} || $ENV{LOGNAME};
+	for (@to) { $_ .= "\@$opt{domain}" if $opt{domain} && !/@/ }
 	my @body = $opt{plain} ? @Plain : @Html;
 	my $smtp = Net::SMTP->new('mailhost');
 	die "$prog: Net::SMTP->new failed" unless $smtp;

@@ -76,3 +76,15 @@ Revision history for Perl extension ClearCase::Argv.
 0.25 Sat Dec  9 23:16:25 EST 2000
 	- Scripts in ./examples had drifted out of alignment with module,
 	  as reported by Martina Riedel.
+
+0.26 Fri Apr  6 11:24:16 EDT 2001
+	- Minor improvements to documentation.
+
+----------------------------------------------------------------------------
+
+1.00 Sat Aug 25 10:14:16 EDT 2001
+	= Test Env: Solaris 8/Win2K SP2/Perl 5.6/CC 4.2
+	- Recognizing that the API has reached maturity,
+	  I've moved the version to indicate a released state.
+	  I'll try hard to stay compatible with 1.00 in
+	  subsequent releases.

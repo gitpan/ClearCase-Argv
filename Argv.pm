@@ -1,8 +1,10 @@
 package ClearCase::Argv;
 
-$VERSION = '0.25';
+$VERSION = '1.00';
 
-use Argv 0.53 qw(MSWIN);
+use Argv 1.00;
+
+use constant MSWIN	=> $^O =~ /MSWin32|Windows_NT/i;
 
 @ISA = qw(Argv);
 @EXPORT_OK = (@Argv::EXPORT_OK, qw(ctsystem ctexec ctqx ctqv));
@@ -52,9 +54,10 @@ if (!MSWIN && ($< == 0 || $< != $>)) {
 # Class method to get/set the location of 'cleartool'.
 sub cleartool { (undef, $ct) = @_ if $_[1]; $ct }
 
-# Change a prog value of q(ls) to qw(cleartool ls). If the value is
-# already an array or array ref leave it alone. Same thing if the 1st
-# word contains /cleartool/ or is an absolute path.
+# Override of base-class method to change a prog value of q(ls) into
+# qw(cleartool ls). If the value is already an array or array ref
+# leave it alone. Same thing if the 1st word contains /cleartool/
+# or is an absolute path.
 sub prog {
     my $self = shift;
     my $prg = shift;
@@ -167,7 +170,7 @@ sub ipc_cleartool {
 # shell, so we subclass the quoting method to deal with it. Not
 # currently well tested with esoteric cmd lines such as mkattr.
 ## THIS STUFF IS REALLY COMPLEX WITH ALL THE PERMUTATIONS
-## OF PLATFORMS AND API'S. WATCH OUT.
+## OF PLATFORMS, SUBCLASSES, AND API'S. WATCH OUT.
 sub quote
 {
     my $self = shift;
@@ -234,7 +237,6 @@ sub attropts {
 *system = \&Argv::system;
 *exec = \&Argv::exec;
 *qv = \&Argv::qv;
-*MSWIN = \&Argv::MSWIN;
 
 # Export our own functional interfaces as well.
 sub ctsystem	{ return __PACKAGE__->new(@_)->system }
@@ -263,15 +265,15 @@ ClearCase::Argv - ClearCase-specific subclass of Argv
     $describe->stderr(0)->system;
     # Run it without the flags.
     $describe->system(-);
-    # Create label type iff it doesn't exist
+    # Create label type XX iff it doesn't exist
     ClearCase::Argv->new(qw(mklbtype -nc XX))
 	    if ClearCase::Argv->new(qw(lstype lbtype:XX))->stderr(0)->qx;
 
-    # functional interface
+    # Functional interface
     use ClearCase::Argv qw(ctsystem ctexec ctqx);
     ctsystem('pwv');
     my @lsco = ctqx(qw(lsco -avobs -s));
-    # Similar to OO example: create label type iff it doesn't exist
+    # Similar to OO example: create label type XX iff it doesn't exist
     ctsystem(qw(mklbtype XX)) if !ctqx({stderr=>0}, "lstype lbtype:XX");
 
 I<There are more examples in the ./examples subdir that comes with this
@@ -359,15 +361,17 @@ C<system(), exec(), or qx()>:
 
 Note that when using an overridden C<system()> et al you must still
 specify 'cleartool' as the program, whereas C<ctsystem()> and friends
-handle that.
+handle that. Also, the I<qx> operator cannot be overridden so we use
+I<qv()> instead.
 
 =head1 CAREFUL PROGRAMMERS WANTED
 
 If you're the kind of programmer who tends to execute whole strings
-such as C<system("cleartool pwv -s")> or who uses backquotes in a void
-context, this module won't help you much. These are bad habits
-regardless of whether you use ClearCase::Argv and you should strive to
-overcome them.
+such as C<system("cleartool pwv -s")> reflexively or who uses
+backquotes in a void context, this module won't help you much because
+it can't easily support those styles. These are bad habits regardless
+of whether you use ClearCase::Argv and you should strive to overcome
+them.
 
 =head1 STICKINESS
 
@@ -421,11 +425,11 @@ perl(1), Argv, IPC::ClearTool, IPC::ChildSafe
 
 =head1 AUTHOR
 
-David Boyce <dsb@world.std.com>
+David Boyce <dsb@boyski.com>
 
 =head1 COPYRIGHT
 
-Copyright (c) 1999,19100 David Boyce. All rights reserved.  This Perl
+Copyright (c) 1999-2001 David Boyce. All rights reserved.  This Perl
 program is free software; you may redistribute it and/or modify it
 under the same terms as Perl itself.
 

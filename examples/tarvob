@@ -52,10 +52,9 @@ for my $tag (@ARGV) {
     }
     my $d = $Opt{backupdir} || $stg;
     (my $v = $tag) =~ s%^\W+%%;
-    (my $b = $v) =~ s%^vobs_%%;
     next if $lock->args("vob:$tag")->system;
     unlink("$d/$v.tar") if !$tar->noexec;
-    my $cmd = "gtar -cf $d/$v.tar $b.vbs $b.vbs/d/ddft/* $b.vbs/s/sdft/*";
+    my $cmd = "gtar -cf $d/$v.tar $v.vbs $v.vbs/d/ddft/* $v.vbs/s/sdft/*";
     $pass ++ if $tar->args($cmd)->stdout(1)->system;
     $pass++ if $unlock->args("vob:$tag")->system;
     $rc += $pass;
