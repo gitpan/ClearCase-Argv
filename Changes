@@ -67,3 +67,8 @@ Revision history for Perl extension ClearCase::Argv.
 	  files matching /.*cleartool.*/ without it being mistaken
 	  for a command prefix.
 	- Fixed spurious warning.
+
+0.24 Fri Aug  4 14:37:07 EDT 2000
+	- Changed the test script to abort more gracefully (exit 0)
+	  if not run with a VOB.
+	- Require Argv 0.53 (no particular reason).

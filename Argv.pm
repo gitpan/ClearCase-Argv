@@ -1,8 +1,8 @@
 package ClearCase::Argv;
 
-$VERSION = '0.23';
+$VERSION = '0.24';
 
-use Argv 0.51 qw(MSWIN);
+use Argv 0.53 qw(MSWIN);
 
 @ISA = qw(Argv);
 @EXPORT_OK = (@Argv::EXPORT_OK, qw(ctsystem ctexec ctqx ctqv));
@@ -68,7 +68,7 @@ sub prog {
 # Win32 only. CmdExec works in CC 3.2.1 but output is backwards!
 # This class method determines if 3.2.1 is in use and sets an attr
 # which causes the lines to be reversed.
-# We could do this automatically but want to avoid penalizing 4.0+ users.
+# We could test this automatically but want to avoid penalizing 4.0+ users.
 # This method is defined but a no-op on UNIX.
 sub cc_321_hack {
     my $self = shift;
@@ -164,7 +164,7 @@ sub ipc_cleartool {
 }
 
 # The cleartool command has different quoting rules from any
-# shell, so subclass the quoting method to deal with it. Not
+# shell, so we subclass the quoting method to deal with it. Not
 # currently well tested with esoteric cmd lines such as mkattr.
 ## THIS STUFF IS REALLY COMPLEX WITH ALL THE PERMUTATIONS
 ## OF PLATFORMS AND API'S. WATCH OUT.
@@ -280,15 +280,15 @@ it's probably your best source for cut-and-paste code.>
 
 =head1 DESCRIPTION
 
-This is a subclass of I<Argv> for use with ClearCase.  It basically
-overrides the prog() method to recognize the fact that ClearCase
-commands have two words, e.g. "cleartool checkout".
+This is a subclass of I<Argv> for use with ClearCase.  It overrides the
+Argv->prog() method to recognize the fact that ClearCase commands have
+two words, e.g. "cleartool checkout".
 
 It also provides a special method C<'ipc_cleartool'> which, as the name
 implies, enables use of the IPC::ClearTool module such that subsequent
 cleartool commands are sent to a coprocess.
 
-I<ClearCase::Argv is otherwise identical to its base class, so see
+I<ClearCase::Argv is in most ways identical to its base class, so see
 "perldoc Argv" for substantial further documentation.>
 
 =head1 IPC::ClearTool INTERFACE
@@ -306,10 +306,10 @@ underlying ClearTool object (in case you want to use it directly).
 
 =item *
 
-When called with a non-zero argument it creates a ClearTool object; if
-this fails for any reason a warning is printed and execution continues
-in 'normal mode'. The warning may be suppressed or turned to a fatal
-error by specifying different true values; see examples below.
+When called with a non-zero argument it creates an IPC::ClearTool
+object; if this fails for any reason a warning is printed and execution
+continues in 'normal mode'. The warning may be suppressed or turned to
+a fatal error by specifying different true values; see examples below.
 
 =item *
 
@@ -406,13 +406,14 @@ reports or patches gratefully accepted.
 =head1 PORTABILITY
 
 ClearCase::Argv should work on all ClearCase platforms. It's primarily
-tested on Solaris 7 and NT 4.0, with CC 3.2.1 and 4.0, using Perl5.004
-and 5.005. The CAL stuff doesn't work with CC <3.2.1.
+been tested on Solaris 7 and NT 4.0, with CC 3.2.1 and 4.0, using
+Perl5.004, 5.005, and 5.6. The CAL stuff doesn't work with CC versions
+< 3.2.1.
 
 =head1 FILES
 
-The module is a subclass of I<Argv> and thus requires it to be installed.
-If running in I<ipc mode> it will also need IPC::ClearTool.
+This is a subclass of I<Argv> and thus requires it to be installed.  If
+running in I<ipc mode> it will also need IPC::ClearTool.
 
 =head1 SEE ALSO
 

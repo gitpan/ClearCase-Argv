@@ -40,7 +40,7 @@ print qq(
 ************************************************************************
 This test script doubles as a demo of what you can do with the
 ClearCase::Argv class. First, we'll run pwv to make sure you're
-in a view/vob:
+in a view/VOB:
 ************************************************************************
 ************************************************************************
 
@@ -50,7 +50,10 @@ my $wdv = ClearCase::Argv->new("pwv -wdview");
 my $view = $wdv->qx;
 chomp $view;
 if ($? || !$view || $view =~ /\sNONE\s/) {
-    die "Sorry, you need to run this test from a view and VOB";
+    print qq(Hmm, you're not in a view/VOB so subsequent tests will be skipped.
+Unpack and "make test" within a VOB directory for full test results.
+);
+    exit 0;
 } else {
     print "Good, you're in '$view'\n";
 }
