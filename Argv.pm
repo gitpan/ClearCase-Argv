@@ -1,8 +1,8 @@
 package ClearCase::Argv;
 
-$VERSION = '1.00';
+$VERSION = '1.02';
 
-use Argv 1.00;
+use Argv 1.02;
 
 use constant MSWIN	=> $^O =~ /MSWin32|Windows_NT/i;
 
@@ -65,6 +65,20 @@ sub prog {
 	return $self->SUPER::prog($prg, @_);
     } else {
 	return $self->SUPER::prog([$ct, $prg], @_);
+    }
+}
+
+sub unixpath {
+    my $self = shift;
+    $self->SUPER::unixpath(@_);
+    # Now apply CC-specific, @@-sensitive transforms to partial lines.
+    for my $line (@_) {
+	my $fixed = '';
+	for (split(m%(\S+@@\S+)%, $line)) {
+	    s%\\%/%g if m%^\S+@@\S+$%;
+	    $fixed .= $_;
+	}
+	$line = $fixed;
     }
 }
 
@@ -190,9 +204,10 @@ sub quote
 	    }
 	}
     }
+    my $inpathnorm = $self->inpathnorm;
     for (@_) {
 	# If requested, change / for \ in Windows file paths.
-	s%/%\\%g if $self->inpathnorm;
+	s%/%\\%g if $inpathnorm;
 	# Special case - turn internal newlines back to literal \n
 	s%\n%\\n%g if !MSWIN;
 	# Skip arg if already quoted ...
@@ -229,9 +244,8 @@ sub comment {
 # Add -/ipc_cleartool to list of supported attr-flags.
 sub attropts {
     my $self = shift;
-    return $self->SUPER::attropts(@_, 'ipc_cleartool');
+    return $self->SUPER::attropts(@_, qw(ipc_cleartool));
 }
-*stdopts = \&attropts;		# backward compatibility
 
 # A hack so the Argv functional interfaces can get propagated.
 *system = \&Argv::system;
@@ -277,14 +291,14 @@ ClearCase::Argv - ClearCase-specific subclass of Argv
     ctsystem(qw(mklbtype XX)) if !ctqx({stderr=>0}, "lstype lbtype:XX");
 
 I<There are more examples in the ./examples subdir that comes with this
-module. Also, the test script is designed as a demo and benchmark;
-it's probably your best source for cut-and-paste code.>
+module. Also, the test script is designed as a demo and benchmark; it's
+probably your best source for cut-and-paste code.>
 
 =head1 DESCRIPTION
 
 This is a subclass of I<Argv> for use with ClearCase.  It overrides the
-Argv->prog() method to recognize the fact that ClearCase commands have
-two words, e.g. "cleartool checkout".
+I<Argv-E<gt>prog()> method to recognize the fact that ClearCase
+commands have two words, e.g. "cleartool checkout".
 
 It also provides a special method C<'ipc_cleartool'> which, as the name
 implies, enables use of the IPC::ClearTool module such that subsequent
@@ -292,6 +306,61 @@ cleartool commands are sent to a coprocess.
 
 I<ClearCase::Argv is in most ways identical to its base class, so see
 "perldoc Argv" for substantial further documentation.>
+
+=head2 OVERRIDDEN METHODS
+
+A few methods of the base class I<Argv> are overridden with modified
+semantics. These include:
+
+=over 4
+
+=item * prog
+
+As mentioned above, I<ClearCase::Argv-E<gt>prog> prepends the word 'cleartool'
+to each command line.
+
+=item * outpathnorm
+
+On Windows, cleartool's way of handling pathnames is underdocumented
+and complex. Given a choice, it always prefers and uses the native
+(\-separated) format. Though it will understand and (sometimes)
+preserve /-separated pathnames, any path information it adds (notably
+version-extended data) is B<always> \-separated. For example:
+
+    cleartool ls -s -d x:/vobs_xyz/foo/bar
+
+will return something like
+
+    x:/vobs_xyz/foo\bar@@\main\3
+
+Note that the early forward slashes are retained (though the last /
+before the C<@@> becomes a \ for some reason, perhaps just a bug in
+I<ls>). And all version info after the C<@@> uses \.
+
+There's no way to determine with certainty which lines in the output of
+a cleartool command are intended to be interpreted as pathnames and
+which might just happen to look like one. I.e. the phrase "either/or"
+might occur in a comment returned by I<cleartool describe>; should we
+interpret it as a pathname?
+
+The strategy taken by the I<Argv-E<gt>outpathnorm> attribute of the
+base class is to "fix" each line of output returned by the I<-E<gt>qx>
+method B<iff>, when considered as a pathname it refers to an existing
+file.  This can miss pathnames which are not alone on a line, as well
+as version-extended pathnames within a snapshot view.  But having the
+advantage of knowing about ClearCase, the overridden
+I<ClearCase::Argv-E<gt>outpathnorm> extends the above strategy to also
+modify any strings internal to the line which (a) look like pathnames
+and (b) contain C<@@>. This errs on the side of caution: it will rarely
+convert strings in error but may not convert pathnames in formats where
+they are neither alone on the line nor contain version-extended info.
+It can also be foiled by pathnames containing whitespace.
+
+In summary, I<ClearCase::Argv-E<gt>outpathnorm> will normalize (a) all
+version-extended pathnames and (b) paths of any type which are alone on
+a line and refer to an existing filesystem object.
+
+=back
 
 =head1 IPC::ClearTool INTERFACE
 
@@ -308,7 +377,7 @@ underlying ClearTool object (in case you want to use it directly).
 
 =item *
 
-When called with a non-zero argument it creates an IPC::ClearTool
+When called with a non-zero argument it creates an I<IPC::ClearTool>
 object; if this fails for any reason a warning is printed and execution
 continues in 'normal mode'. The warning may be suppressed or turned to
 a fatal error by specifying different true values; see examples below.

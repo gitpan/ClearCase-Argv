@@ -1,9 +1,9 @@
 #!/usr/local/bin/perl
 
 ## This is an example of how to set the child process into a view
-## and control it. Note that although this will work on both UNIX
-## and Windows, it will give errors on Windows because that's
-## what the CC developers chose to do for some reason.
+## and control it. Note that this will work on UNIX; on
+## Windows support for setview was withdrawn with the 4.0
+## release for some reason.
 
 use ClearCase::Argv qw(ctsystem ctqx);
 
@@ -22,8 +22,15 @@ my @views = $ct->argv('lsview -s')->qx;
 print "\n*Show that we can set the coprocess into a view and keep it there.\n";
 $ct->argv('pwv -s')->system;
 $ct->argv('setview', [], $views[0])->system;
+# Prove that we've retained the setview state.
 $ct->argv('pwv -s')->system;
+# Demonstrate how to run a random process within the set view
+print "*Demonstrate how to run a random process within the set view\n";
+$ct->argv(qw(shell id))->system;
+$ct->sh('/bin/id -a')->system;
 # ... from here you could cd into a vob and do whatever you want.
+
+__END__
 
 print "\n*Similar to above but using the functional interface ...\n";
 ClearCase::Argv->dbglevel(0);

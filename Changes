@@ -88,3 +88,7 @@ Revision history for Perl extension ClearCase::Argv.
 	  I've moved the version to indicate a released state.
 	  I'll try hard to stay compatible with 1.00 in
 	  subsequent releases.
+
+1.02 Tue Sep 25 11:16:37 EDT 2001
+	- Subclass Argv->outpathnorm attribute to change \ to / after @@).
+	- Removed stdopts() backward compatibility alias
