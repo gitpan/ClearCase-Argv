@@ -60,14 +60,14 @@ Unpack and "make test" within a VOB directory for full test results.
 
 print qq(
 ************************************************************************
-One thing we did sloppily above: we passed the command as a string,
-thus defeating any chance for the module to (a) do anything smart
-involving options parsing  or (b) avoid using a shell, which can have
-various unfortunate side effects. So in the following lsvob command
-we'll not only use a list but go further by segregating the options
-part of the argv using an array ref.  This isn't necessary but is
-almost always a good idea.  Let's also show how to turn on the debug
-attribute:
+One thing we did sloppily above: we passed the command as a string
+("pwv -wdview"), thus defeating any chance for the module to (a) do
+anything intelligent with options parsing or (b) avoid using a shell,
+which can have various unfortunate side effects. So in the following
+lsvob command we'll not only use a list but go further by segregating
+the options part of the argv using an array ref.  This isn't necessary
+but is almost always a good idea.  Let's also show how to turn on the
+debug attribute:
 ************************************************************************
 
 );
@@ -80,7 +80,7 @@ $final += printok($? == 0);
 print qq(
 ************************************************************************
 Now we'll run an lsregion command just to show (1) how to create,
-invoke, and destroy the Argv object on the fly and (2) that the debug
+invoke, and destroy an Argv object on the fly and (2) that the debug
 mode wasn't inherited since it was a mere instance attribute:
 ************************************************************************
 
@@ -166,68 +166,64 @@ pass the cleartool command as a method name, e.g. "$obj->pwd('-s')".
 
 );
 
-my $x = ClearCase::Argv->new({-dbglevel=>2});
+my $x = ClearCase::Argv->new({-dbglevel=>1});
 $x->lslock('-s')->system;
+
+print "\n\tTHIS SPACE INTENTIONALLY LEFT BLANK.\n";
 
 my $reps = $ENV{CCARGV_TEST_REPS} || 50;
 print qq(
 ************************************************************************
 The following test doubles as a benchmark. It compares $reps
-invocations of "cleartool lsview -l" using a fork/exec (`cmd`)
-style vs $reps of the IPC::ClearTool model (if $reps is the
-wrong number for your environment, you can override it with the
-CCARGV_TEST_REPS environment variable).
+invocations of "cleartool lsview -l" using a fork/exec (`cmd`) style vs
+$reps using the CtCmd (in-process) and IPC::ClearTool (co-process)
+models, if those modules are installed. If not, it will fall back the
+fork/exec.  If $reps is the wrong number for your environment, you can
+override it with the CCARGV_TEST_REPS environment variable.
 ************************************************************************
 
 );
 
-my $rc;
-my $style = "FORK";
-my($sum1, $sum2);
+my($rc, $sum1, $sum2, $sum3);
 
 my $t1 = new Benchmark;
 my $slow = ClearCase::Argv->new('lsview', ['-l']);
 for (1..$reps) { $sum1 += unpack("%32C*", $slow->qx); $rc += $? }
-print "$style: ", timestr(timediff(new Benchmark, $t1), 'noc'), "\n";
+print "FORK : ", timestr(timediff(new Benchmark, $t1), 'noc'), "\n";
 $final += printok($rc == 0);
 
-# See if the coprocess module is available and use it if so.
-ClearCase::Argv->ipc_cleartool;
-$style = 'IPC ' if ClearCase::Argv->ipc_cleartool;
+# See if the coprocess module is available and try it if so.
+if (ClearCase::Argv->ipc_cleartool(1)) {
+    my $t2 = new Benchmark;
+    my $fast = ClearCase::Argv->new('lsview', ['-l']);
+    $rc = 0;
+    for (1..$reps) { $sum2 += unpack("%32C*", $fast->qx); $rc += $? }
+    print "IPC  : ", timestr(timediff(new Benchmark, $t2), 'noc'), "\n";
+    ClearCase::Argv->ipc_cleartool(0);		# turn off use of coprocess
+    $final += printok($rc == 0);
+    warn "Warning: checksums differ between FORK and IPC runs!"
+						    if printok($sum1 == $sum2);
+}
 
-# The CAL CmdExec functionality was present but undocumented
-# in CC 3.2.1. I've been told that it works fine except for one
-# small (!) bug - the output is backward. This class method checks the
-# CC version and reverses all output if it's 3.2.1. If it's <3.2.1,
-# CAL is SOL; if greater this is a no-op.
-ClearCase::Argv->cc_321_hack;
-
-my $t2 = new Benchmark;
-my $fast = ClearCase::Argv->new('lsview', ['-l']);
-$rc = 0;
-for (1..$reps) { $sum2 += unpack("%32C*", $fast->qx); $rc += $? }
-print "$style: ", timestr(timediff(new Benchmark, $t2), 'noc'), "\n";
-$final += printok($rc == 0);
-
-warn "Warning: checksums differ between 1st and 2nd runs!"
-						if printok($sum1 == $sum2);
+# See if the CtCmd module is available and try it if so.
+if (ClearCase::Argv->ctcmd(1)) {
+    my $t3 = new Benchmark;
+    my $api = ClearCase::Argv->new('lsview', ['-l']);
+    $rc = 0;
+    for (1..$reps) { $sum3 += unpack("%32C*", $api->qx); $rc += $? }
+    print "CTCMD: ", timestr(timediff(new Benchmark, $t3), 'noc'), "\n";
+    ClearCase::Argv->ctcmd(0);		# turn off use of CtCmd
+    $final += printok($rc == 0);
+    warn "Warning: checksums differ between FORK and CTCMD runs!"
+						if printok($sum1 == $sum3);
+}
 
 print qq(
 ************************************************************************
-With luck - if you have IPC::ChildSafe installed - you were able to
-see a substantial speedup using it. I usually see multiples ranging
-from 2:1 to 10:1, but this is dependent on a wide range of factors.
-Next, demonstrate how to turn off the coprocess on a class-wide basis:
-************************************************************************
-
-);
-
-print "THIS SPACE INTENTIONALLY LEFT BLANK.\n";
-ClearCase::Argv->ipc_cleartool(0);		# turn off use of coprocess
-
-print qq(
-************************************************************************
-Last, we'll use the 'summary' class method to see what's been done to date:
+With luck, if you have CtCmd or IPC::ChildSafe installed, you were able to
+see a substantial speedup using them. I usually see multiples ranging
+from 50% to 10:1, but this is dependent on a wide range of factors.
+Last, we'll use the 'summary' class method to see what cmds were run:
 ************************************************************************
 
 );

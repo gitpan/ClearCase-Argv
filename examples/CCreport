@@ -464,7 +464,7 @@ for my $dir (@ARGV) {
 	my @body = $opt{plain} ? @Plain : @Html;
 	my $smtp = Net::SMTP->new('mailhost');
 	die "$prog: Net::SMTP->new failed" unless $smtp;
-	$smtp->debug(1) if $ct->dbglevel > 0;
+	$smtp->debug(1) if $ct->dbglevel > 1;
 	$smtp->mail($ENV{LOGNAME}) || die "$prog: Net::SMTP->mail failed";
 	my @ok = $smtp->to(@to, {SkipBad => 1});
 	# If any addressees were unknown ...

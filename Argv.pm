@@ -1,8 +1,8 @@
 package ClearCase::Argv;
 
-$VERSION = '1.02';
+$VERSION = '1.06';
 
-use Argv 1.02;
+use Argv 1.06;
 
 use constant MSWIN	=> $^O =~ /MSWin32|Windows_NT/i;
 
@@ -10,6 +10,8 @@ use constant MSWIN	=> $^O =~ /MSWin32|Windows_NT/i;
 @EXPORT_OK = (@Argv::EXPORT_OK, qw(ctsystem ctexec ctqx ctqv));
 
 use strict;
+
+my $class = __PACKAGE__;
 
 # For programming purposes we can't allow per-user preferences.
 if ($ENV{CLEARCASE_PROFILE}) {
@@ -29,7 +31,7 @@ my $ct = 'cleartool';
 # Attempt to find the definitive ClearCase bin path at startup. Don't
 # try excruciatingly hard, it would take unwarranted time. And don't
 # do so at all if running setuid or as root. If this doesn't work,
-# the path can be set explicitly via the 'cleartool' class method.
+# the path can be set explicitly via the 'find_cleartool' class method.
 if (!MSWIN && ($< == 0 || $< != $>)) {
     $ct = '/usr/atria/bin/cleartool';	# running setuid or as root
 } elsif ($ENV{PATH} !~ m%\W(atria|clearcase)\Wbin\b%i) {
@@ -52,22 +54,125 @@ if (!MSWIN && ($< == 0 || $< != $>)) {
 }
 
 # Class method to get/set the location of 'cleartool'.
-sub cleartool { (undef, $ct) = @_ if $_[1]; $ct }
+sub find_cleartool { (undef, $ct) = @_ if $_[1]; $ct }
 
-# Override of base-class method to change a prog value of q(ls) into
+# Override of base-class method to change a prog value of 'ls' into
 # qw(cleartool ls). If the value is already an array or array ref
 # leave it alone. Same thing if the 1st word contains /cleartool/
 # or is an absolute path.
 sub prog {
     my $self = shift;
     my $prg = shift;
-    if (@_ || ref($prg) || $prg =~ m%^/|^\S*cleartool%) {
+    if (@_ || ref($prg) || $prg =~ m%^/|^\S*cleartool% || $self->ctcmd) {
 	return $self->SUPER::prog($prg, @_);
     } else {
 	return $self->SUPER::prog([$ct, $prg], @_);
     }
 }
 
+# Overridden to allow for CtCmd mode.
+sub exec {
+    $class->new(@_)->exec if !ref($_[0]) || ref($_[0]) eq 'HASH';
+    my $self = shift;
+    return $self->SUPER::exec(@_) unless $self->ctcmd;
+    exit $self->system(@_);
+}
+
+# Overridden to allow for CtCmd mode.
+sub system {
+    return $class->new(@_)->system if !ref($_[0]) || ref($_[0]) eq 'HASH';
+    my $self = shift;
+    return $self->SUPER::system(@_) unless $self->ctcmd;
+    my $envp = $self->envp;
+    my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
+    $self->args($self->glob) if $self->autoglob;
+    my @prog = @{$self->{AV_PROG}};
+    shift(@prog) if $prog[0] =~ m%cleartool%;
+    my @opts = $self->_sets2opts(@_);
+    my @args = @{$self->{AV_ARGS}};
+    my @cmd = (@prog, @opts, @args);
+    my $dbg = $self->dbglevel;
+    $self->_addstats("cleartool @prog", scalar @args) if defined %Argv::Summary;
+    $self->warning("cannot close stdin of child process") if $ifd;
+    if ($self->noexec) {
+	$self->_dbg($dbg, '-', \*STDERR, @cmd);
+	return 0;
+    }
+    my($outplace, $errplace) = (0, 0);
+    if ($self->quiet) {
+	$outplace = 1;
+    } elsif ($ofd == 2) {
+	# TBD
+    } else {
+	warn "Warning: illegal value '$ofd' for stdout" if $ofd > 2;
+	# TBD
+    }
+    if ($efd == 1) {
+	# TBD
+    } else {
+	warn "Warning: illegal value '$efd' for stderr" if $efd > 2;
+	$errplace = -1 if $efd == 0;
+    }
+    local %ENV = $envp ? %$envp : %ENV;
+    # Work around a CC 5.0 (or CtCmd?) bug
+    $ENV{PERL_BADFREE} = 0 unless defined $ENV{PERL_BADFREE};
+    $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
+    my $ct = CtCmd->new(outfunc=>$outplace, errfunc=>$errplace);
+    $ct->exec(@cmd);
+    my $rc = $ct->status;
+    $? = $rc;
+    print STDERR "+ (\$? == $?)\n" if $dbg > 1;
+    $self->fail($self->syfail) if $rc;
+    return $rc;
+}
+
+# Overridden to allow for CtCmd mode.
+sub qx {
+    return $class->new(@_)->qx if !ref($_[0]) || ref($_[0]) eq 'HASH';
+    my $self = shift;
+    return $self->SUPER::qx(@_) unless $self->ctcmd;
+    my $envp = $self->envp;
+    my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
+    $self->args($self->glob) if $self->autoglob;
+    my @prog = @{$self->{AV_PROG}};
+    shift(@prog) if $prog[0] =~ m%cleartool%;
+    my @opts = $self->_sets2opts(@_);
+    my @args = @{$self->{AV_ARGS}};
+    my @cmd = (@prog, @opts, @args);
+    my $dbg = $self->dbglevel;
+    $self->_addstats("cleartool @prog", scalar @args) if defined %Argv::Summary;
+    $self->warning("cannot close stdin of child process") if $ifd;
+    if ($self->noexec) {
+	$self->_dbg($dbg, '-', \*STDERR, @cmd);
+	return 0;
+    }
+    local %ENV = $envp ? %$envp : %ENV;
+    # Work around a CC 5.0 (or CtCmd?) bug
+    $ENV{PERL_BADFREE} = 0 unless defined $ENV{PERL_BADFREE};
+    $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
+    my $ct = CtCmd->new;
+    my($rc, $data, $errors) = $ct->exec(@cmd);
+    $? = $rc;
+    print STDERR $errors if $efd == 2;
+    print STDERR "+ (\$? == $?)\n" if $dbg > 1;
+    $self->fail($self->syfail) if $rc;
+    if (wantarray) {
+	my @data = split /\n/, $data;
+	if (! $self->autochomp) {
+	    for (@data) { $_ .= "\n" }
+	}
+	$self->unixpath(@data) if MSWIN && $self->outpathnorm;
+	print map {"+ <- $_"} @data if @data && $dbg >= 2;
+	return @data;
+    } else {
+	chomp($data) if $self->autochomp;
+	$self->unixpath($data) if MSWIN && $self->outpathnorm;
+	print "+ <- $data" if $data && $dbg >= 2;
+	return $data;
+    }
+}
+
+# Normalizes a path to Unix style (forward slashes).
 sub unixpath {
     my $self = shift;
     $self->SUPER::unixpath(@_);
@@ -82,16 +187,48 @@ sub unixpath {
     }
 }
 
-# Win32 only. CmdExec works in CC 3.2.1 but output is backwards!
-# This class method determines if 3.2.1 is in use and sets an attr
-# which causes the lines to be reversed.
-# We could test this automatically but want to avoid penalizing 4.0+ users.
-# This method is defined but a no-op on UNIX.
-sub cc_321_hack {
-    my $self = shift;
-    return unless MSWIN;
-    my $csafe = $self->ipc_childsafe;
-    return $csafe->cc_321_hack(@_) if $csafe;
+# Attaches to or detaches from a CtCmd object for execution.
+sub ctcmd {
+    my $self = shift;	# this might be an instance or a classname
+    my $level = shift;
+    eval { require CtCmd };
+    if ($@ && defined($level)) {
+	if ($level == 2) {
+	    if ($@ =~ /^(Can't locate [^(]+)/) {
+		$@ = "$1 - continuing in normal mode\n";
+	    }
+	    warn("Warning: $@");
+	} elsif ($level != 1) {
+	    die("Error: $@");
+	}
+	return undef;
+    }
+    no strict 'refs';		# because $self may be a symbolic hash ref
+    if (defined($level)) {
+	if ($level) {
+	    if ($self->ipc_cleartool) {
+		$self->warning("cannot use IPC::ClearTool and CtCmd together")
+								    if $level>1;
+		return 0;
+	    }
+	    $self->{CCAV_CTCMD} = 1;
+	    # If setting a class attribute, export it to the
+	    # env in case we fork a child using ClearCase::Argv.
+	    ## NOT SURE WE REALLY WANT THIS IN THIS CASE ...??
+	    ## $ENV{CLEARCASE_ARGV_CTCMD} = $self->{CCAV_CTCMD} if !ref($self);
+	    return $self;
+	} else {					# close up shop
+	    delete $self->{CCAV_CTCMD} if $self->{CCAV_CTCMD};
+	    delete $ENV{CLEARCASE_ARGV_CTCMD}
+				if $ENV{CLEARCASE_ARGV_CTCMD} && !ref($self);
+	    return $self;
+	}
+    } else {
+	if (!defined($self->{CCAV_CTCMD}) && !defined($class->{CCAV_CTCMD})) {
+	    return $ENV{CLEARCASE_ARGV_CTCMD} ? $self : 0;
+	}
+	return ($self->{CCAV_CTCMD} || $class->{CCAV_CTCMD}) ? $self : undef;
+    }
 }
 
 # Starts or stops a cleartool coprocess.
@@ -102,6 +239,10 @@ sub ipc_cleartool {
 	return $self->ipc_childsafe(0);	# close up shop
     } elsif (!defined($level) && defined(wantarray)) {
 	return $self->ipc_childsafe; # return the active ChildSafe object
+    }
+    if ($self->ctcmd) {
+	$self->warning("attempt to use ipc_cleartool and CtCmd together");
+	return 0;
     }
     my $chk = sub { return int grep /Error:\s/, @{$_[0]} };
     my %params = ( CHK => $chk, QUIT => 'exit' );
@@ -175,18 +316,16 @@ sub ipc_cleartool {
 	} elsif ($level != 1) {
 	    die("Error: $@");
 	}
-	return undef;
     }
     return $self;
 }
 
-# The cleartool command has different quoting rules from any
-# shell, so we subclass the quoting method to deal with it. Not
+# The cleartool command has quoting rules different from any system
+# shell so we subclass the quoting method to deal with it. Not
 # currently well tested with esoteric cmd lines such as mkattr.
 ## THIS STUFF IS REALLY COMPLEX WITH ALL THE PERMUTATIONS
-## OF PLATFORMS, SUBCLASSES, AND API'S. WATCH OUT.
-sub quote
-{
+## OF PLATFORMS, SUBCLASSES, SHELLS, AND API'S. WATCH OUT.
+sub quote {
     my $self = shift;
     # Don't quote the 2nd word where @_ = ('cleartool', 'pwv -s');
     return @_ if @_ == 2;
@@ -241,16 +380,11 @@ sub comment {
     return $self;
 }
 
-# Add -/ipc_cleartool to list of supported attr-flags.
+# Add -/ipc_cleartool and -/ctcmd to list of supported attr-flags.
 sub attropts {
     my $self = shift;
-    return $self->SUPER::attropts(@_, qw(ipc_cleartool));
+    return $self->SUPER::attropts(@_, qw(ipc_cleartool ctcmd));
 }
-
-# A hack so the Argv functional interfaces can get propagated.
-*system = \&Argv::system;
-*exec = \&Argv::exec;
-*qv = \&Argv::qv;
 
 # Export our own functional interfaces as well.
 sub ctsystem	{ return __PACKAGE__->new(@_)->system }
@@ -290,22 +424,29 @@ ClearCase::Argv - ClearCase-specific subclass of Argv
     # Similar to OO example: create label type XX iff it doesn't exist
     ctsystem(qw(mklbtype XX)) if !ctqx({stderr=>0}, "lstype lbtype:XX");
 
-I<There are more examples in the ./examples subdir that comes with this
-module. Also, the test script is designed as a demo and benchmark; it's
-probably your best source for cut-and-paste code.>
+I<There are more examples in the ./examples subdir> that comes with this
+module. Also, I<the test script is designed as a demo and benchmark> and
+is a good source for cut-and-paste code.
 
 =head1 DESCRIPTION
 
-This is a subclass of I<Argv> for use with ClearCase.  It overrides the
-I<Argv-E<gt>prog()> method to recognize the fact that ClearCase
-commands have two words, e.g. "cleartool checkout".
+I<ClearCase::Argv> is a subclass of I<Argv> for use with ClearCase.  It
+exists to provide an abstraction layer over I<cleartool>. A program
+written to this interface can be told to send commands to ClearCase via
+the standard technique of executing cleartool or via the CtCmd or
+IPC::ClearTool modules (see) by flipping a switch.
 
-It also provides a special method C<'ipc_cleartool'> which, as the name
-implies, enables use of the IPC::ClearTool module such that subsequent
-cleartool commands are sent to a coprocess.
+To that end it provides a couple of special methods I<C<ctcmd>> and
+I<C<ipc_cleartool>>. The C<ctcmd> method can be used to cause cleartool
+commands to be run in the current process space using I<CtCmd>.
+Similarly, C<ipc_cleartool> will send commands to a cleartool
+co-process using the I<IPC::ClearTool> module. The CtCmd and
+IPC::ClearTool modules must be separately installed for these to
+work. See their docs for details on what they do, and see I<ALTERNATE
+EXECUTION INTERFACES> below for how to invoke them.
 
-I<ClearCase::Argv is in most ways identical to its base class, so see
-"perldoc Argv" for substantial further documentation.>
+As I<ClearCase::Argv is in other ways identical to its base class>, see
+C<perldoc Argv> for substantial further documentation.
 
 =head2 OVERRIDDEN METHODS
 
@@ -316,16 +457,24 @@ semantics. These include:
 
 =item * prog
 
-As mentioned above, I<ClearCase::Argv-E<gt>prog> prepends the word 'cleartool'
-to each command line.
+I<ClearCase::Argv-E<gt>prog> prepends the word C<cleartool> to each
+command line when in standard (not CtCmd or IPC::ClearTool) mode.
+
+=item * quote
+
+The cleartool "shell" has its own quoting rules. Therefore, when using 
+CtCmd or IPC::ClearTool modes, command-line quoting must be adjusted
+to fit cleartool's rules rather than those of the native system shell,
+so the C<-E<gt>quote> method is extended to handle that case.
 
 =item * outpathnorm
 
 On Windows, cleartool's way of handling pathnames is underdocumented
-and complex. Given a choice, it always prefers and uses the native
-(\-separated) format. Though it will understand and (sometimes)
-preserve /-separated pathnames, any path information it adds (notably
-version-extended data) is B<always> \-separated. For example:
+and complex. Apparently, given a choice cleartool on Windows always
+prefers and uses the native (\-separated) format. Though it will
+understand and (mostly) preserve /-separated pathnames, any path
+information it I<adds> (notably version-extended data) is B<always>
+\-separated. For example:
 
     cleartool ls -s -d x:/vobs_xyz/foo/bar
 
@@ -333,28 +482,30 @@ will return something like
 
     x:/vobs_xyz/foo\bar@@\main\3
 
-Note that the early forward slashes are retained (though the last /
+Note that the early forward slashes are retained but the last /
 before the C<@@> becomes a \ for some reason, perhaps just a bug in
 I<ls>). And all version info after the C<@@> uses \.
 
-There's no way to determine with certainty which lines in the output of
-a cleartool command are intended to be interpreted as pathnames and
-which might just happen to look like one. I.e. the phrase "either/or"
-might occur in a comment returned by I<cleartool describe>; should we
-interpret it as a pathname?
+Normalizing pathnames is difficult because there's no way to determine
+with certainty which lines in the output of a cleartool command are
+pathnames and which might just happen to look like one. I.e. the phrase
+"either/or" might occur in a comment returned by I<cleartool describe>;
+should we interpret it as a pathname?
 
 The strategy taken by the I<Argv-E<gt>outpathnorm> attribute of the
 base class is to "fix" each line of output returned by the I<-E<gt>qx>
-method B<iff>, when considered as a pathname it refers to an existing
-file.  This can miss pathnames which are not alone on a line, as well
-as version-extended pathnames within a snapshot view.  But having the
-advantage of knowing about ClearCase, the overridden
+method B<iff> the I<entire line>, when considered as a pathname, refers
+to an existing file.  This can miss pathnames which are not alone on a
+line, as well as version-extended pathnames within a snapshot view.
+
+Having the advantage of knowing about ClearCase, the overridden
 I<ClearCase::Argv-E<gt>outpathnorm> extends the above strategy to also
 modify any strings internal to the line which (a) look like pathnames
 and (b) contain C<@@>. This errs on the side of caution: it will rarely
 convert strings in error but may not convert pathnames in formats where
 they are neither alone on the line nor contain version-extended info.
-It can also be foiled by pathnames containing whitespace.
+It can also be foiled by pathnames containing whitespace or by a change
+in the extended naming symbol from C<@@>.
 
 In summary, I<ClearCase::Argv-E<gt>outpathnorm> will normalize (a) all
 version-extended pathnames and (b) paths of any type which are alone on
@@ -362,51 +513,43 @@ a line and refer to an existing filesystem object.
 
 =back
 
-=head1 IPC::ClearTool INTERFACE
+=head1 ALTERNATE EXECUTION INTERFACES
 
-The C<'ipc_cleartool'> method creates an IPC::ClearTool object and
-sends subsequent commands to it. This method is highly
-context-sensitive:
+The I<C<-E<gt>ctcmd>> method allows you to send cleartool commands
+directly to clearcase via the CtCmd interface rather than by exec-ing
+cleartool itself.
 
-=over 4
-
-=item *
-
-When called with no arguments and a non-void context, it returns the
-underlying ClearTool object (in case you want to use it directly).
-
-=item *
-
-When called with a non-zero argument it creates an I<IPC::ClearTool>
-object; if this fails for any reason a warning is printed and execution
-continues in 'normal mode'. The warning may be suppressed or turned to
-a fatal error by specifying different true values; see examples below.
-
-=item *
-
-When called with an argument of 0, it shuts down any existing
-ClearTool object; any further executions would revert to 'normal mode'.
-
-=back
+When called with no argument it returns a boolean indicating whether
+I<CtCmd mode> is on or off. When called with a numerical argument, it
+sets the CtCmd mode as follows. If the argument is 0, CtCmd mode is
+turned off; subsequent commands are sent to real cleartool via the
+standard execution interface.  With an argument of 1, it attempts to
+use CtCmd mode but if CtCmd fails to load for any reason it will
+silently continue in standard mode.  With an argument of 2 the behavior
+is the same but a warning is printed on CtCmd failure.  With an
+argument of 3 the warning becomes a fatal error.
 
 =head2 Examples
 
-    # use IPC::ClearTool if available, else continue silently
-    ClearCase::Argv->ipc_cleartool(1);
-    # use IPC::ClearTool if available, else print warning and continue
-    ClearCase::Argv->ipc_cleartool(2);
-    # same as above since default == 2
-    ClearCase::Argv->ipc_cleartool;
-    # use IPC::ClearTool, die if not available
-    ClearCase::Argv->ipc_cleartool(3);
-    # shut down the IPC::ClearTool coprocess
-    ClearCase::Argv->ipc_cleartool(0);
-    # Use the IPC::ClearTool object directly
-    ClearCase::Argv->ipc_cleartool->cmd('pwv');
+    # use CtCmd if available, else continue silently
+    ClearCase::Argv->ctcmd(1);
+    # use CtCmd if available, else print warning and continue
+    ClearCase::Argv->ctcmd(2);
+    # Try CtCmd, die if not available
+    ClearCase::Argv->ctcmd(3);
+    # Turn off use of CtCmd
+    ClearCase::Argv->ctcmd(0);
 
-Typically C<ipc_cleartool> will be used as a class method to specify a
+Typically C<-E<gt>ctcmd> will be used as a class method to specify a
 place for all cleartool commands to be sent. However, it may also be
-invoked on an object to associate just that instance with a coprocess.
+invoked on an object to associate just that instance with CtCmd.
+
+Note: you can tell which mode is in use by turning on the I<dbglevel>
+attribute. Verbosity styles are as follows:
+
+    + cleartool pwv		# standard (fork/exec)
+    +> pwv			# CtCmd
+    -->> pwv			# IPC::ClearTool
 
 =head1 FUNCTIONAL INTERFACE
 

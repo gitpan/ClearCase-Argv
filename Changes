@@ -83,12 +83,18 @@ Revision history for Perl extension ClearCase::Argv.
 ----------------------------------------------------------------------------
 
 1.00 Sat Aug 25 10:14:16 EDT 2001
-	= Test Env: Solaris 8/Win2K SP2/Perl 5.6/CC 4.2
+	= Test Env: Solaris8/Win2KSP2/Perl5.6/CC4.2
 	- Recognizing that the API has reached maturity,
 	  I've moved the version to indicate a released state.
 	  I'll try hard to stay compatible with 1.00 in
 	  subsequent releases.
 
 1.02 Tue Sep 25 11:16:37 EDT 2001
-	- Subclass Argv->outpathnorm attribute to change \ to / after @@).
+	- Subclass Argv->outpathnorm attribute (to change \ to / after @@).
 	- Removed stdopts() backward compatibility alias
+
+1.06 Fri Dec 21 07:50:06 EST 2001
+	= Test Env: Solaris8/Win2KSP2/Perl5.6.1/CC5.0
+	- Added support for CtCmd.
+	- Require use of Argv 1.06 since there are a couple
+	  significant bugfixes there.
