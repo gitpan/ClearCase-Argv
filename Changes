@@ -54,3 +54,6 @@ Revision history for Perl extension ClearCase::Argv.
 	- Allow hashref attr specifiers to have a leading '-'.
 	- Modified the ipc_cleartool method to return the underlying
 	  ChildSafe object when called with no args and a non-void context.
+
+0.20 Wed Feb  2 14:53:50 EST 2000
+	- Cleaned up ipc_cleartool/Win32 error handling from COM object.

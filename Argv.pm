@@ -1,12 +1,12 @@
 package ClearCase::Argv;
 
-use Argv 0.48 qw(MSWIN);
+use Argv 0.49 qw(MSWIN);
 
 use strict;
 use vars qw($VERSION @ISA @EXPORT_OK);
 @ISA = qw(Argv);
 @EXPORT_OK = (@Argv::EXPORT_OK, qw(ctsystem ctexec ctqx ctqv));
-$VERSION = '0.19';
+$VERSION = '0.20';
 
 # For programming purposes we can't allow per-user preferences.
 $ENV{CLEARCASE_PROFILE} = '/Over/Ridden/by/ClearCase/Argv';
@@ -66,10 +66,10 @@ sub prog {
 # We could do this automatically but want to avoid penalizing 4.0+ users.
 # This method is defined but a no-op on UNIX.
 sub cc_321_hack {
-    return unless MSWIN;
     my $self = shift;
+    return unless MSWIN;
     my $csafe = $self->ipc_childsafe;
-    return $csafe->cc_321_hack if $csafe;
+    return $csafe->cc_321_hack(@_) if $csafe;
 }
 
 # Starts or stops a cleartool coprocess.
@@ -87,7 +87,7 @@ sub ipc_cleartool {
     eval { require IPC::ChildSafe };
     if (!$@) {
 	local $@;
-	IPC::ChildSafe->VERSION(3.09);
+	IPC::ChildSafe->VERSION(3.10);
 	if (MSWIN) {
 	    require Win32::OLE;
 	    no strict 'subs';
@@ -103,18 +103,24 @@ sub ipc_cleartool {
 	    *IPC::ChildSafe::_puts = sub {
 		my $self = shift;
 		my $cmd = shift;
-		my $dbg = $self->{DBGLEVEL};
+		my $dbg = $self->{DBGLEVEL} || 0;
 		warn "+ -->> $cmd\n" if $dbg;
 		my $out = $self->{IPC_CHILD}->CmdExec($cmd);
-		my $error = int Win32::OLE->LastError;
-		$self->{IPC_STATUS} = $error;
 		# CmdExec always returns a scalar through Win32::OLE so
 		# we have to split it in case it's really a list.
-		my @stdout = $self->_fixup_COM_scalars($out) if $out;
-		print map {"+ <<-- $_"} @stdout if @stdout && $dbg > 1;
-		push(@{$self->{IPC_STDOUT}}, @stdout);
-		push(@{$self->{IPC_STDERR}},
-		    $self->_fixup_COM_scalars(Win32::OLE->LastError)) if $error;
+		if ($out) {
+		    my @stdout = $self->_fixup_COM_scalars($out);
+		    push(@{$self->{IPC_STDOUT}}, @stdout);
+		    print STDERR map {"+ <<-- $_"} @stdout if $dbg > 1;
+		}
+		if (my $err = Win32::OLE->LastError) {
+		    $err =~ s/OLE exception from.*?:\s*//;
+		    my @stderr = $self->_fixup_COM_scalars($err);
+		    @stderr = grep !/Unspecified error/is, @stderr;
+		    print STDERR map {"+ <<== $_"} @stderr if $dbg > 1;
+		    push(@{$self->{IPC_STDERR}},
+				    map {"cleartool: Error: $_"} @stderr);
+		}
 		return $self;
 	    };
 	    *IPC::ChildSafe::finish = sub {
@@ -139,7 +145,7 @@ sub ipc_cleartool {
 	}
     }
     if ($@ || !defined $self->ipc_childsafe(@args)) {
-	if ($level == 2 || !defined($level)) {
+	if (!defined($level) || $level == 2) {
 	    if ($@ =~ /^(Can't locate [^(]+)/) {
 		$@ = "$1 - continuing in normal mode\n";
 	    }
@@ -182,7 +188,7 @@ sub quote
 	# Special case - turn internal newlines back to literal \n
 	s%\n%\\n%g if !MSWIN;
 	# Skip arg if already quoted ...
-	next if substr($_, 0, 1) eq '"' && substr($_, -1, 1) eq '"';
+	next if m%^".*"$%s;
 	# ... or contains no special chars.
 	next unless m%[*\s~?\[\]]%;
 	# Now quote embedded quotes ...
