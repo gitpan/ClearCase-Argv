@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.14';
+$VERSION = '1.15';
 
 use Argv 1.09;
 
@@ -107,7 +107,7 @@ sub system {
 	# TBD
     } else {
 	warn "Warning: illegal value '$ofd' for stdout" if $ofd > 2;
-	# TBD
+	$outplace = -1 if $ofd == 0;
     }
     if ($efd == 1) {
 	# TBD
@@ -198,6 +198,7 @@ sub unixpath {
 sub ctcmd {
     my $self = shift;	# this might be an instance or a classname
     my $level = shift;
+    $level = 2 if !defined($level) && !defined(wantarray);
     eval { require ClearCase::CtCmd };
     if ($@ && defined($level)) {
 	my $msg = $@;
@@ -408,6 +409,28 @@ sub ipc {
 }
 *ipc_cleartool = \&ipc;
 
+sub fork_exec {
+    my $self = shift;
+    $self->ipc(0);
+    $self->ctcmd(0);
+}
+
+sub exec_style {
+    my $self = shift;
+    my $style = shift;
+    if ($style) {
+	no strict 'subs';
+	$self->$style(shift || 3);
+    }
+    if ($self->ctcmd) {
+	return "CTCMD";
+    } elsif ($self->ipc) {
+	return "IPC";
+    } else {
+	return "FORK";
+    }
+}
+
 sub _read_only {
     my $self = shift;
     if ($self->readonly =~ /^a/i) {	# a=automatic
@@ -510,7 +533,7 @@ ClearCase::Argv - ClearCase-specific subclass of Argv
     # Run it with with stderr turned off.
     $describe->stderr(0)->system;
     # Run it without the flags.
-    $describe->system(-);
+    $describe->system('-');
     # Create label type XX iff it doesn't exist
     ClearCase::Argv->new(qw(mklbtype -nc XX))
 	    if ClearCase::Argv->new(qw(lstype lbtype:XX))->stderr(0)->qx;
@@ -529,10 +552,11 @@ is a good source for cut-and-paste code.
 =head1 DESCRIPTION
 
 I<ClearCase::Argv> is a subclass of I<Argv> for use with ClearCase.  It
-exists to provide an abstraction layer over I<cleartool>. A program
-written to this interface can be told to send commands to ClearCase via
-the standard technique of executing cleartool or via the
-ClearCase::CtCmd or IPC::ClearTool modules (see) by flipping a switch.
+exists to provide an abstraction layer over the I<cleartool>
+command-line interface. A program written to this API can be told to
+send commands to ClearCase via the standard technique of executing
+cleartool or via the ClearCase::CtCmd or IPC::ClearTool modules (see)
+by flipping a switch.
 
 To that end it provides a couple of special methods I<C<ctcmd>> and
 I<C<ipc>>. The C<ctcmd> method can be used to cause cleartool commands
@@ -772,5 +796,9 @@ David Boyce <dsb@boyski.com>
 Copyright (c) 1999-2001 David Boyce. All rights reserved.  This Perl
 program is free software; you may redistribute it and/or modify it
 under the same terms as Perl itself.
+
+=head1 GUARANTEE
+
+Double your money back!! Believe it!
 
 =cut

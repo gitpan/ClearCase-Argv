@@ -138,3 +138,11 @@ Revision history for Perl extension ClearCase::Argv.
 	  functionality. If CtCmd is not installed on Windows,
 	  ClearCase::Argv is now capable of sending commands
 	  directly to CAL. See POD for details.
+
+1.15
+	- Improved default for ->ctcmd() method in void context
+	  (now same as specifying 2).
+	- Added ->fork-exec method (syntactic sugar to let you make
+	  it clear that you aren't using ->ctcmd or ->ipc modes).
+	- Fixed bug involving ->stdout(0) and ->ctcmd mode.
+	- Added scripts to benchmark fork/exec vs ctcmd modes.

@@ -190,7 +190,8 @@ my($rc, $sum1, $sum2, $sum3);
 my $t1 = new Benchmark;
 my $slow = ClearCase::Argv->new('lsview', ['-l']);
 for (1..$reps) { $sum1 += unpack("%32C*", $slow->qx); $rc += $? }
-print "FORK : ", timestr(timediff(new Benchmark, $t1), 'noc'), "\n";
+print ClearCase::Argv->exec_style, " : ";
+print timestr(timediff(new Benchmark, $t1), 'noc'), "\n";
 $final += printok($rc == 0);
 
 # See if the coprocess module is available and try it if so.
@@ -199,7 +200,8 @@ if (ClearCase::Argv->ipc(1)) {
     my $fast = ClearCase::Argv->new('lsview', ['-l']);
     $rc = 0;
     for (1..$reps) { $sum2 += unpack("%32C*", $fast->qx); $rc += $? }
-    print "IPC  : ", timestr(timediff(new Benchmark, $t2), 'noc'), "\n";
+    print ClearCase::Argv->exec_style, " : ";
+    print timestr(timediff(new Benchmark, $t2), 'noc'), "\n";
     ClearCase::Argv->ipc(0);		# turn off use of coprocess
     $final += printok($rc == 0);
     warn "Warning: checksums differ between FORK and IPC runs!"
@@ -212,7 +214,8 @@ if (ClearCase::Argv->ctcmd(1)) {
     my $api = ClearCase::Argv->new('lsview', ['-l']);
     $rc = 0;
     for (1..$reps) { $sum3 += unpack("%32C*", $api->qx); $rc += $? }
-    print "CTCMD: ", timestr(timediff(new Benchmark, $t3), 'noc'), "\n";
+    print ClearCase::Argv->exec_style, " : ";
+    print timestr(timediff(new Benchmark, $t3), 'noc'), "\n";
     ClearCase::Argv->ctcmd(0);		# turn off use of CtCmd
     $final += printok($rc == 0);
     warn "Warning: checksums differ between FORK and CTCMD runs!"
