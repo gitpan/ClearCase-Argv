@@ -110,3 +110,7 @@ Revision history for Perl extension ClearCase::Argv.
 	- The CtCmd module (see) was renamed to ClearCase::CtCmd,
 	  necessitating a renaming of its uses here.
 
+1.09 Mon Apr 15 07:24:35 EDT 2002
+	- Fixed a versioning typo. The previous version was incorrectly
+	  requiring a version of 'Argv' (1.08) which wasn't yet
+	  released. This was just a finger fumble.

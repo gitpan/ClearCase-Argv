@@ -178,7 +178,7 @@ The following test doubles as a benchmark. It compares $reps
 invocations of "cleartool lsview -l" using a fork/exec (`cmd`) style vs
 $reps using the ClearCase::CtCmd (in-process) and IPC::ClearTool
 (co-process) models, if those modules are installed. If not, it will
-fall back the fork/exec.  If $reps is the wrong number for your
+fall back to fork/exec.  If $reps is the wrong number for your
 environment, you can override it with the CCARGV_TEST_REPS environment
 variable.
 ************************************************************************
