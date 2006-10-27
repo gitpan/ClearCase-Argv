@@ -1,8 +1,8 @@
 package ClearCase::Argv;
 
-$VERSION = '1.21';
+$VERSION = '1.22';
 
-use Argv 1.16;
+use Argv 1.17;
 
 use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 
@@ -361,12 +361,13 @@ sub ipc {
     eval { require IPC::ChildSafe };
     if (!$@) {
 	local $@;
-	IPC::ChildSafe->VERSION(3.10);
+	IPC::ChildSafe->VERSION(3.16);
 	if (MSWIN) {
 	    require Win32::OLE;
 	    no strict 'subs';
 	    local $^W = 0;
 	    package IPC::ChildSafe;
+	    $IPC::ChildSafe::VERSION = '3.16';
 	    *IPC::ChildSafe::_open = sub {
 		my $self = shift;
 		$self->{IPC_CHILD} = Win32::OLE->new('ClearCase.ClearTool')
@@ -598,8 +599,8 @@ for details on what they do, and see I<ALTERNATE EXECUTION INTERFACES>
 below for how to invoke them. Sample scripts are packaged with
 I<ClearCase::Argv> in ./examples.
 
-As I<ClearCase::Argv is in other ways identical to its base class>, see
-C<perldoc Argv> for substantial further documentation.
+I<As ClearCase::Argv is in most other ways identical to its base
+class>, see C<perldoc Argv> for substantial further documentation.>
 
 =head2 OVERRIDDEN METHODS
 
@@ -633,13 +634,13 @@ I<-E<gt>noexec> attribute: instead of skipping execution of all
 commands, it only skips commands which modify ClearCase state.
 
 Consider a script which does an C<lsview> to see if a view exists
-followed by a C<mkview> to create it if not, and has a I<-E<gt>n> flag
-to say C<show what you would do without doing it>, implemented
-internally by setting I<-E<gt>noexec>. Without the C<readonly=auto>, it
-wouldn't even do the lsview so you can't find out if it would do the
-mkview. With it, however, the lsview would be performed while the
-mkview would be shown but skipped as intended.  This causes scripts to
-behave far more realistically in I<-E<gt>noexec> mode.
+followed by a C<mkview> to create it if not, and has a I<-n> flag to
+say C<show what you would do without doing it>, implemented internally
+by setting I<-E<gt>noexec>. Without the C<readonly=auto>, it wouldn't
+even do the lsview so you can't find out if it would do the mkview.
+With it, however, the lsview would be performed while the mkview would
+be shown but skipped as intended.  This causes scripts to behave far
+more realistically in I<-E<gt>noexec> mode.
 
 =item * outpathnorm
 
@@ -767,9 +768,9 @@ These interfaces may also be imported via the I<:functional> tag:
 If you're the kind of programmer who tends to execute whole strings
 such as C<system("cleartool pwv -s")> reflexively or who uses
 backquotes in a void context, this module won't help you much because
-it can't easily support those styles. These are bad habits regardless
-of whether you use ClearCase::Argv and you should strive to overcome
-them.
+it can't easily support those styles. These are deprecated techniques
+regardless of whether you use ClearCase::Argv and you should strive to
+overcome them.
 
 =head1 STICKINESS
 
@@ -808,14 +809,13 @@ reports or patches gratefully accepted.
 =head1 PORTABILITY
 
 ClearCase::Argv should work on all ClearCase platforms. It's primarily
-been tested on Solaris 7 and NT 4.0, with CC 3.2.1 and 4.0, using
-Perl5.004, 5.005, and 5.6. The CAL stuff doesn't work with CC versions
-< 3.2.1.
+maintained on Solaris 9 and Windows XP with CC 7.0, using Perl5.8.x.
 
 =head1 FILES
 
-This is a subclass of I<Argv> and thus requires it to be installed.  If
-running in I<ipc mode> it will also need IPC::ClearTool.
+This is a subclass of I<Argv> and thus requires it to be installed.  In
+order to run in I<ipc mode> it will also need IPC::ClearTool.
+Similarly, ClearCase::CtCmd is required for I<ctcmd mode>.
 
 =head1 SEE ALSO
 
@@ -827,7 +827,7 @@ David Boyce <dsbperl AT boyski.com>
 
 =head1 COPYRIGHT
 
-Copyright (c) 1999-2001 David Boyce. All rights reserved.  This Perl
+Copyright (c) 1999-2006 David Boyce. All rights reserved.  This Perl
 program is free software; you may redistribute it and/or modify it
 under the same terms as Perl itself.
 
