@@ -1,9 +1,10 @@
 =head1 IMPORTANT NOTE
 
 THIS module is called "ClearCase::Argv". There is a DIFFERENT module
-called "Argv". ClearCase::Argv depends on (requires) Argv. That is, you
-must download and install BOTH in order for ClearCase::Argv to work.
-This has confused quite a few people so I highlight it here.
+called "Argv". ClearCase::Argv depends on (requires) Argv. More
+precisely, ClearCase::Argv is a subclass of Argv. Therefore, you must
+download and install BOTH in order for ClearCase::Argv to work.  This
+naming has confused quite a few people so I highlight it here.
 
 =head1 README
 
@@ -24,7 +25,7 @@ UNIX and Windows by providing versions of I<system>, I<exec>, and I<qx>
 almost the same. This includes automatically quoting arguments to
 protect them from the C<cmd.exe> shell, automatically converting
 /-separated pathnames to \, etc. These features can keep a lot of hair
-out of your script.
+out of your script (and on your head).
 
 =item * Optional Co-Process for Speed
 
@@ -36,6 +37,8 @@ will start B<cleartool> as an B<IPC::ClearTool> co-process and arrange to
 send all subsequent system/exec/qx commands to it instead of forking a
 new child process each time. This can speed up scripts by anywhere
 between 1 (i.e. not at all) and 10 times by my measurements.
+
+However, the CtCmd interface (below) is generally preferred nowadays.
 
 =item * CtCmd Interface for Speed
 
@@ -57,10 +60,11 @@ plus a few more.
 =item * No Major Investment
 
 It's easy to convert an existing script to use ClearCase::Argv or
-back.  Just change all instances of backquotes to C<qv()> and remove
-any existing Win32-porting hackery. To go back to native style, either
-change C<qv()> to C<qx()> (I<backquotes are generally deprecated in
-favor of qx anyway>), or add a line like:
+back.  Just add a 'use ClearCase::Argv' line and change all instances
+of backquotes to C<qv()> and remove any existing Win32-porting hackery.
+To go back to native style, either change C<qv()> to C<qx()>
+(I<backquotes are generally deprecated in favor of qx anyway>), or add
+a line like:
 
 	sub qv { qx(@_) }
 
@@ -109,10 +113,9 @@ commitment of faith.
 
 =back
 
-I was able to "port" C<IPC::ClearTool> to Windows by calling into the
-ClearCase Automation Library, a COM interface first available in
-ClearCase 4.0 (it was actually present in unsupported form in 3.2.1).
-But the other issues remained, until ...
+I was able to "port" C<IPC::ClearTool> to Windows by calling in to the
+ClearCase Automation Library (CAL), a COM interface first available in
+ClearCase 4.0.  But the other issues remained, until ...
 
 =head2 Argv
 

@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
 <title>ClearCase::Argv README</title>
-<link rev="made" href="mailto:perladmin@cleartool.com" />
+<link rev="made" href="mailto:dsb@boyski.com" />
 </head>
 
 <body style="background-color: white">
@@ -32,9 +32,10 @@
 </p>
 <h1><a name="important_note">IMPORTANT NOTE</a></h1>
 <p>THIS module is called ``ClearCase::Argv''. There is a DIFFERENT module
-called ``Argv''. ClearCase::Argv depends on (requires) Argv. That is, you
-must download and install BOTH in order for ClearCase::Argv to work.
-This has confused quite a few people so I highlight it here.</p>
+called ``Argv''. ClearCase::Argv depends on (requires) Argv. More
+precisely, ClearCase::Argv is a subclass of Argv. Therefore, you must
+download and install BOTH in order for ClearCase::Argv to work.  This
+naming has confused quite a few people so I highlight it here.</p>
 <p>
 </p>
 <hr />
@@ -56,7 +57,7 @@ UNIX and Windows by providing versions of <em>system</em>, <em>exec</em>, and <e
 almost the same. This includes automatically quoting arguments to
 protect them from the <code>cmd.exe</code> shell, automatically converting
 /-separated pathnames to \, etc. These features can keep a lot of hair
-out of your script.
+out of your script (and on your head).
 <p></p>
 <li><strong><a name="item_optional_co%2dprocess_for_speed">Optional Co-Process for Speed</a></strong><br />
 </li>
@@ -67,6 +68,7 @@ For any script which uses ClearCase::Argv, the 'ipc' class method
 send all subsequent system/exec/qx commands to it instead of forking a
 new child process each time. This can speed up scripts by anywhere
 between 1 (i.e. not at all) and 10 times by my measurements.</p>
+<p>However, the CtCmd interface (below) is generally preferred nowadays.</p>
 <p></p>
 <li><strong><a name="item_ctcmd_interface_for_speed">CtCmd Interface for Speed</a></strong><br />
 </li>
@@ -87,10 +89,11 @@ system/exec/qx functions. These include:
 <li><strong><a name="item_no_major_investment">No Major Investment</a></strong><br />
 </li>
 It's easy to convert an existing script to use ClearCase::Argv or
-back.  Just change all instances of backquotes to <code>qv()</code> and remove
-any existing Win32-porting hackery. To go back to native style, either
-change <code>qv()</code> to <code>qx()</code> (<em>backquotes are generally deprecated in
-favor of qx anyway</em>), or add a line like:
+back.  Just add a 'use ClearCase::Argv' line and change all instances
+of backquotes to <code>qv()</code> and remove any existing Win32-porting hackery.
+To go back to native style, either change <code>qv()</code> to <code>qx()</code>
+(<em>backquotes are generally deprecated in favor of qx anyway</em>), or add
+a line like:
 <pre>
         sub qv { qx(@_) }</pre>
 <p>And remove the 'use ClearCase::Argv' line of course.</p>
@@ -132,10 +135,9 @@ system/exec/qx. Thus converting an existing tool to it required a
 substantial commitment of time, and using it at all meant a substantial
 commitment of faith.
 <p></p></ul>
-<p>I was able to ``port'' <code>IPC::ClearTool</code> to Windows by calling into the
-ClearCase Automation Library, a COM interface first available in
-ClearCase 4.0 (it was actually present in unsupported form in 3.2.1).
-But the other issues remained, until ...</p>
+<p>I was able to ``port'' <code>IPC::ClearTool</code> to Windows by calling in to the
+ClearCase Automation Library (CAL), a COM interface first available in
+ClearCase 4.0.  But the other issues remained, until ...</p>
 <p>
 </p>
 <h2><a name="argv">Argv</a></h2>

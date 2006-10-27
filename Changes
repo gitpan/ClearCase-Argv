@@ -155,3 +155,22 @@ Revision history for Perl extension ClearCase::Argv.
 
 1.18 Tue Jul 22 10:37:12 EDT 2003
 	- Fixed contact data.
+
+1.19 Mon Mar 14 11:10:26 EST 2005
+	- Allow ->stdout() and ->stderr() to specify any EXPR
+	  which is valid to open(), e.g. ->stdout(">>/tmp/foo");
+
+1.20 Sun May  1 09:53:01 EDT 2005
+	- Fixes to deal with new deprecations involving AUTOLOAD
+	  in Perl 5.8.*.
+	- Removed overrides of system/exec/qv - too confusing and I
+	  don't believe they ever worked right or were used by anyone.
+	  You can still get the Argv (as opposed to ClearCase::Argv)
+	  overrides of these.
+
+1.21 Tue Oct 24 14:38:10 EDT 2006
+	- Contributions from Kenneth Olving:
+	-   Added overload of the Argv->pipe method
+	-   Added test code for ->pipe.
+	-   Updated docs.
+	- Now requires Argv 1.16.

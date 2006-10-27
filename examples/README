@@ -1,6 +1,11 @@
 This directory contains a set of example programs using ClearCase::Argv.
 Details:
 
+- simplest: The simplest use of ClearCase::Argv I could think up.
+
+- simple: A longer script with a bunch of simple, standalone, code
+nuggets.
+
 - CCreport: A "real" application which generates a textual report on
 changes made across some time slice in some set of vobs by some set of
 users, etc., all configurable.

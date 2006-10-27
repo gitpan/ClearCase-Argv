@@ -1,14 +1,16 @@
 package ClearCase::Argv;
 
-$VERSION = '1.18';
+$VERSION = '1.21';
 
-use Argv 1.09;
+use Argv 1.16;
 
 use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 
 @ISA = qw(Argv);
-%EXPORT_TAGS = ( 'functional' => [ qw(ctsystem ctexec ctqx ctqv) ] );
-@EXPORT_OK = (@Argv::EXPORT_OK, @{$EXPORT_TAGS{functional}});
+%EXPORT_TAGS = ( 'functional' => [ qw(ctsystem ctexec ctqx ctqv ctpipe) ] );
+@EXPORT_OK = (@{$EXPORT_TAGS{functional}});
+
+*AUTOLOAD = \&Argv::AUTOLOAD;
 
 use strict;
 
@@ -35,7 +37,7 @@ my $ct = 'cleartool';
 # the path can be set explicitly via the 'find_cleartool' class method.
 if (!MSWIN && ($< == 0 || $< != $>)) {
     $ct = '/usr/atria/bin/cleartool';	# running setuid or as root
-} elsif ($ENV{PATH} !~ m%\W(atria|clearcase)\Wbin\b%i) {
+} elsif ($ENV{PATH} !~ m%\W(atria|ClearCase)\Wbin\b%i) {
     if (!MSWIN) {
 	my $abin = $ENV{ATRIAHOME} ? "$ENV{ATRIAHOME}/bin" : '/usr/atria/bin';
 	$ENV{PATH} .= ":$abin" if -d $abin && $ENV{PATH} !~ m%/atria/bin%;
@@ -100,22 +102,28 @@ sub system {
 	$self->_dbg($dbg, '-', \*STDERR, @cmd);
 	return 0;
     }
+    open(_O, '>&STDOUT');
+    open(_E, '>&STDERR');
     my($outplace, $errplace) = (0, 0);
     if ($self->quiet) {
 	$outplace = 1;
     } elsif ($ofd == 2) {
-	# TBD
+	open(STDOUT, '>&STDERR') || warn "Can't dup stdout";
+    } elsif ($ofd !~ m%^\d*$%) {
+	open(STDOUT, $ofd) || warn "$ofd: $!";
     } else {
 	warn "Warning: illegal value '$ofd' for stdout" if $ofd > 2;
 	$outplace = -1 if $ofd == 0;
     }
+    $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
     if ($efd == 1) {
-	# TBD
+	open(STDERR, '>&STDOUT') || warn "Can't dup stderr";
+    } elsif ($efd !~ m%^\d*$%) {
+	open(STDERR, $efd) || warn "$efd: $!";
     } else {
 	warn "Warning: illegal value '$efd' for stderr" if $efd > 2;
 	$errplace = -1 if $efd == 0;
     }
-    $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
     my $ctc = ClearCase::CtCmd->new(outfunc=>$outplace, errfunc=>$errplace);
     if ($envp) {
 	local %ENV = %$envp;
@@ -125,6 +133,8 @@ sub system {
     }
     my $rc = $ctc->status;
     $? = $rc;
+    open(STDOUT, '>&_O'); close(_O);
+    open(STDERR, '>&_E'); close(_E);
     print STDERR "+ (\$? == $?)\n" if $dbg > 1;
     $self->fail($self->syfail) if $rc;
     return $rc;
@@ -177,6 +187,22 @@ sub qx {
 	print "+ <- $data" if $data && $dbg >= 2;
 	return $data;
     }
+}
+
+# Overridden to allow for CtCmd mode.
+sub pipe {
+    return $class->new(@_)->pipe if !ref($_[0]) || ref($_[0]) eq 'HASH';
+
+    my $self = shift;
+
+    my $otherSelf = $self;
+    if ($self->ctcmd || $self->ipc) {
+	$otherSelf = $self->clone();
+	$self->warning("CtCmd/IPC usage incompatible with pipe - temporarily reverting to plain cleartool...") if $self->dbglevel;
+	$otherSelf->prog($ct, $self->prog);
+    }
+
+    return $otherSelf->SUPER::pipe(@_);
 }
 
 # Normalizes a path to Unix style (forward slashes).
@@ -511,6 +537,7 @@ sub attropts {
 sub ctsystem	{ return __PACKAGE__->new(@_)->system }
 sub ctexec	{ return __PACKAGE__->new(@_)->exec }
 sub ctqx	{ return __PACKAGE__->new(@_)->qx }
+sub ctpipe	{ return __PACKAGE__->new(@_)->pipe }
 *ctqv = \&ctqx;  # just for consistency
 
 1;
@@ -534,16 +561,20 @@ ClearCase::Argv - ClearCase-specific subclass of Argv
     $describe->stderr(0)->system;
     # Run it without the flags.
     $describe->system('-');
+    # Run it through a pipe.
+    $describe->pipe(sub { print shift; return 1; });
     # Create label type XX iff it doesn't exist
     ClearCase::Argv->new(qw(mklbtype -nc XX))
 	    if ClearCase::Argv->new(qw(lstype lbtype:XX))->stderr(0)->qx;
 
     # Functional interface
-    use ClearCase::Argv qw(ctsystem ctexec ctqx);
+    use ClearCase::Argv qw(ctsystem ctexec ctqx ctpipe);
     ctsystem('pwv');
     my @lsco = ctqx(qw(lsco -avobs -s));
     # Similar to OO example: create label type XX iff it doesn't exist
     ctsystem(qw(mklbtype XX)) if !ctqx({stderr=>0}, "lstype lbtype:XX");
+    ClearCase::Argv->pipecb(sub { print "GOT: " . shift() . "\n"; 1 });
+    ctpipe({autochomp => 1},'lsview', ['-l']);
 
 I<There are more examples in the ./examples subdir> that comes with this
 module. Also, I<the test script is designed as a demo and benchmark> and
@@ -601,16 +632,19 @@ This does nothing by itself but it modifies the behavior of the
 I<-E<gt>noexec> attribute: instead of skipping execution of all
 commands, it only skips commands which modify ClearCase state.
 
-Consider a script which does an C<lsview> to see if a view exists, then
-a C<mkview> to create it if not. With just I<-E<gt>noexec> set, both
-commands would be skipped. With C<readonly=auto> also, only the state-
-modifying (mkview) operation is skipped. This causes scripts to behave
-far more realistically in I<-E<gt>noexec> mode.
+Consider a script which does an C<lsview> to see if a view exists
+followed by a C<mkview> to create it if not, and has a I<-E<gt>n> flag
+to say C<show what you would do without doing it>, implemented
+internally by setting I<-E<gt>noexec>. Without the C<readonly=auto>, it
+wouldn't even do the lsview so you can't find out if it would do the
+mkview. With it, however, the lsview would be performed while the
+mkview would be shown but skipped as intended.  This causes scripts to
+behave far more realistically in I<-E<gt>noexec> mode.
 
 =item * outpathnorm
 
 On Windows, cleartool's way of handling pathnames is underdocumented
-and complex. Apparently, given a choice cleartool on Windows always
+and complex. Apparently, given a choice, cleartool on Windows always
 prefers and uses the native (\-separated) format. Though it will
 understand and (mostly) preserve /-separated pathnames, any path
 information it I<adds> (notably version-extended data) is B<always>
@@ -656,7 +690,7 @@ a line and refer to an existing filesystem object.
 =head1 ALTERNATE EXECUTION INTERFACES
 
 The I<C<-E<gt>ctcmd>> method allows you to send cleartool commands
-directly to clearcase via the CtCmd interface rather than by exec-ing
+directly to ClearCase via the CtCmd interface rather than by exec-ing
 cleartool itself.
 
 When called with no argument it returns a boolean indicating whether
@@ -699,6 +733,10 @@ attribute. Verbosity styles are as follows:
     +> pwv			# CtCmd
     -->> pwv			# IPC::ClearTool
 
+Neither of these modes are compatible with the I<-E<gt>ctpipe> method.
+Therefore, when a pipe is requested it will result in a new process
+created by the traditional execution interface.
+
 A final note on these two: turning on one mode will automatically, and
 silently, turn off the other. I.e. the sequence
 
@@ -714,24 +752,11 @@ For those who don't like OO style, or who want to convert existing
 scripts with the least effort, the I<execution methods> are made
 available as traditional functions. Examples:
 
-	use ClearCase::Argv qw(ctsystem ctexec ctqx);
+	use ClearCase::Argv qw(ctsystem ctexec ctqx ctpipe);
 	my $cwv = ctqx(pwv -s);
 	ctsystem('mklbtype', ['-global'], 'FOO') && exit $?>>8;
 	my @vobs = ctqx({autochomp=>1}, 'lsvob -s');
-
-If you prefer you can override the "real" Perl builtins. This is
-easier for converting an existing script which makes heavy use of
-C<system(), exec(), or qx()>:
-
-	use ClearCase::Argv qw(system exec qv);
-	my $cwv = qv(cleartool pwv -s);
-	system('cleartool', 'mklbtype', ['-global'], 'FOO') && exit $?>>8;
-	my @vobs = qv({autochomp=>1}, 'lsvob -s');
-
-Note that when using an overridden C<system()> et al you must still
-specify 'cleartool' as the program, whereas C<ctsystem()> and friends
-handle that. Also, the I<qx> operator cannot be overridden so we use
-I<qv()> instead.
+	ctpipe('lsview', ['-l'], sub { print "GOT: " . shift() . "\n"; 1 });
 
 These interfaces may also be imported via the I<:functional> tag:
 
@@ -798,7 +823,7 @@ perl(1), Argv, IPC::ClearTool, IPC::ChildSafe
 
 =head1 AUTHOR
 
-David Boyce <dsbperl@cleartool.com>
+David Boyce <dsbperl AT boyski.com>
 
 =head1 COPYRIGHT
 
@@ -808,6 +833,6 @@ under the same terms as Perl itself.
 
 =head1 GUARANTEE
 
-Double your money back!! Believe it!
+Double your money back!
 
 =cut

@@ -46,7 +46,7 @@ in a view/VOB:
 
 );
 
-my $wdv = ClearCase::Argv->new("pwv -wdview");
+my $wdv = ClearCase::Argv->new("pwv -wdview -s");
 my $view = $wdv->qx;
 chomp $view;
 if ($? || !$view || $view =~ /\sNONE\s/) {
@@ -61,7 +61,7 @@ Unpack and "make test" within a VOB directory for full test results.
 print qq(
 ************************************************************************
 One thing we did sloppily above: we passed the command as a string
-("pwv -wdview"), thus defeating any chance for the module to (a) do
+("pwv -wdview -s"), thus defeating any chance for the module to (a) do
 anything intelligent with options parsing or (b) avoid using a shell,
 which can have various unfortunate side effects. So in the following
 lsvob command we'll not only use a list but go further by segregating
@@ -92,8 +92,8 @@ print qq(
 ************************************************************************
 Next we test the functional interface, useful for those who don't
 like the OO style (note that the functional interface is just
-the preceding construct wrapped up in a function). We also turn
-on debug output class-wide, just to show that we can:
+the preceding construct wrapped up in a function). We also toggle
+debug output class-wide, just to show that we can:
 ************************************************************************
 
 );
@@ -133,6 +133,7 @@ of an existing Argv object with the 'prog', 'opts', and 'args' methods:
 
 );
 
+$ls->prog('ls');	# redundant setting
 $ls->opts(qw(-d));
 $ls->args(@files);
 $ls->autochomp(0);
@@ -169,14 +170,13 @@ pass the cleartool command as a method name, e.g. "$obj->pwd('-s')".
 my $x = ClearCase::Argv->new({-dbglevel=>1});
 $x->lslock('-s')->system;
 
-print "\n\tTHIS SPACE INTENTIONALLY LEFT BLANK.\n";
+print "\n\tTHIS SPACE INTENTIONALLY LEFT BLANK :-)\n";
 
-my $reps = $ENV{CCARGV_TEST_REPS} || 50;
-print qq(
+my $reps = $ENV{CCARGV_TEST_REPS} || 50; print qq(
 ************************************************************************
 The following test doubles as a benchmark. It compares $reps
-invocations of "cleartool lsview -l" using a fork/exec (`cmd`) style vs
-$reps using the ClearCase::CtCmd (in-process) and IPC::ClearTool
+invocations of "cleartool lsview -s" using a fork/exec (`cmd`) style
+vs $reps using the ClearCase::CtCmd (in-process) and IPC::ClearTool
 (co-process) models, if those modules are installed. If not, it will
 fall back to fork/exec.  If $reps is the wrong number for your
 environment, you can override it with the CCARGV_TEST_REPS environment
@@ -188,7 +188,7 @@ variable.
 my($rc, $sum1, $sum2, $sum3);
 
 my $t1 = new Benchmark;
-my $slow = ClearCase::Argv->new('lsview', ['-l']);
+my $slow = ClearCase::Argv->new('lsview', ['-s'], $view);
 for (1..$reps) { $sum1 += unpack("%32C*", $slow->qx); $rc += $? }
 print ClearCase::Argv->exec_style, " : ";
 print timestr(timediff(new Benchmark, $t1), 'noc'), "\n";
@@ -197,28 +197,28 @@ $final += printok($rc == 0);
 # See if the coprocess module is available and try it if so.
 if (ClearCase::Argv->ipc(1)) {
     my $t2 = new Benchmark;
-    my $fast = ClearCase::Argv->new('lsview', ['-l']);
+    my $fast = ClearCase::Argv->new('lsview', ['-s'], $view);
     $rc = 0;
     for (1..$reps) { $sum2 += unpack("%32C*", $fast->qx); $rc += $? }
     print ClearCase::Argv->exec_style, " : ";
     print timestr(timediff(new Benchmark, $t2), 'noc'), "\n";
     ClearCase::Argv->ipc(0);		# turn off use of coprocess
     $final += printok($rc == 0);
-    warn "Warning: checksums differ between FORK and IPC runs!"
+    warn "Warning: output differs between FORK and IPC runs!"
 						    if printok($sum1 == $sum2);
 }
 
 # See if the ClearCase::CtCmd module is available and try it if so.
 if (ClearCase::Argv->ctcmd(1)) {
     my $t3 = new Benchmark;
-    my $api = ClearCase::Argv->new('lsview', ['-l']);
+    my $api = ClearCase::Argv->new('lsview', ['-s'], $view);
     $rc = 0;
     for (1..$reps) { $sum3 += unpack("%32C*", $api->qx); $rc += $? }
     print ClearCase::Argv->exec_style, " : ";
     print timestr(timediff(new Benchmark, $t3), 'noc'), "\n";
     ClearCase::Argv->ctcmd(0);		# turn off use of CtCmd
     $final += printok($rc == 0);
-    warn "Warning: checksums differ between FORK and CTCMD runs!"
+    warn "Warning: output differs between FORK and CTCMD runs!"
 						if printok($sum1 == $sum3);
 }
 
@@ -227,8 +227,39 @@ print qq(
 With luck, if you have ClearCase::CtCmd or IPC::ChildSafe installed,
 you were able to see a substantial speedup using them. I usually see
 multiples ranging from 50% to 10:1, but this is dependent on a wide
-range of factors.  Last, we'll use the 'summary' class method to see
-what cmds were run:
+range of factors.
+************************************************************************
+
+************************************************************************
+One interesting use case occurs when you want to run a command that can
+take a lot of time and/or generate a lot of output, but there's a good
+chance you'll find what you're looking for early and can abort the
+command at that time. Or you may only need to keep a small subset of
+text received and thus save a lot of memory. In these cases the ->pipe
+method with an accompanying callback function may be the best choice.
+Here's a demo of a potentially very long-running command which we abort
+after receiving a maximum of 10 lines of output.
+************************************************************************
+
+);
+
+my $t4 = new Benchmark;
+my $thruPipe = ClearCase::Argv->new('find', ['-all', '-type', 'd', '-print']);
+$thruPipe->readonly('yes');
+my $counter = 10;
+# Define the callback which will end the pipe early.
+$thruPipe->pipecb(sub { return --$counter; });
+print "Using ->pipe and aborting after max 10 lines...\n";
+$thruPipe->pipe;
+print "  " . timestr(timediff(new Benchmark, $t4), 'noc'), "\n";
+$final += printok(1);
+
+print qq(
+************************************************************************
+NOTE: in a very small vob, the results above may be in favor of qx due
+to the fact that pipe introduces some overhead (particularly on Windows).
+
+Last, we'll use the 'summary' class method to see what cmds were run:
 ************************************************************************
 
 );

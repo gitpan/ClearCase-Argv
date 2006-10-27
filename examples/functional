@@ -1,6 +1,7 @@
 ## Demo of the functional interface to ClearCase::Argv.
 
-use ClearCase::Argv qw(ctsystem ctqv qv);
+use Argv qw(qv);
+use ClearCase::Argv qw(ctsystem ctqv);
 
 # Use the vanilla qv() for a non-cleartool operation.
 my $year = qv({autochomp=>1}, 'date', '+%Y');
