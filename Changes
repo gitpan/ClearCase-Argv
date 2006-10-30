@@ -176,5 +176,8 @@ Revision history for Perl extension ClearCase::Argv.
 	- Now requires Argv 1.16.
 
 1.22 Fri Oct 27 10:05:35 EDT 2006
-	- Attempting to work around CPAN indexer complaint by
+	- Attempt to work around CPAN indexer complaint by
 	  tweaking version numbers.
+
+1.23 Sun Oct 29 22:24:53 EST 2006
+	- Bugfix to recent ->pipe code changes.

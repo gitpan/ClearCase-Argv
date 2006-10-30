@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.22';
+$VERSION = '1.23';
 
 use Argv 1.17;
 
@@ -170,9 +170,15 @@ sub qx {
 	($rc, $data, $errors) = $ctc->exec(@cmd);
     }
     $? = $rc;
-    print STDERR $errors if $efd == 2;
+    $data ||= '';
+    if ($errors) {
+    	if ($efd == 1) {
+	    $data .= $errors;
+    	} elsif ($efd == 2) {
+	    print STDERR $errors;
+    	}
+    }
     print STDERR "+ (\$? == $?)\n" if $dbg > 1;
-    $self->fail($self->syfail) if $rc;
     if (wantarray) {
 	my @data = split /\n/, $data;
 	if (! $self->autochomp) {
@@ -180,11 +186,19 @@ sub qx {
 	}
 	$self->unixpath(@data) if MSWIN && $self->outpathnorm;
 	print map {"+ <- $_"} @data if @data && $dbg >= 2;
+	if ($rc) {
+	    $self->lastresults($rc, @data);
+	    $self->fail($self->qxfail);
+	}
 	return @data;
     } else {
 	chomp($data) if $self->autochomp;
 	$self->unixpath($data) if MSWIN && $self->outpathnorm;
 	print "+ <- $data" if $data && $dbg >= 2;
+	if ($rc) {
+	    $self->lastresults($rc, $data);
+	    $self->fail($self->qxfail);
+	}
 	return $data;
     }
 }
