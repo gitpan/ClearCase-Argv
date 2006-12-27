@@ -32,7 +32,7 @@
 </p>
 <h1><a name="important_note">IMPORTANT NOTE</a></h1>
 <p>THIS module is called ``ClearCase::Argv''. There is a DIFFERENT module
-called ``Argv''. ClearCase::Argv depends on (requires) Argv. More
+called simply ``Argv''. ClearCase::Argv depends on (requires) Argv. More
 precisely, ClearCase::Argv is a subclass of Argv. Therefore, you must
 download and install BOTH in order for ClearCase::Argv to work.  This
 naming has confused quite a few people so I highlight it here.</p>
@@ -124,16 +124,16 @@ a true ``child'' process.
 <p></p>
 <li></li>
 The interface was/is strange and a little clunky. Not too surprising
-considering that UNIX requires 3 different API's <code>(system, exec, and
+considering that UNIX requires 3 different APIs <code>(system, exec, and
 backquotes)</code> to handle child processes; jamming all that functionality
 into one API is awkward.
 <p></p>
 <li></li>
 Due to the above, any script written to the <strong>IPC::ClearTool</strong> API was
 non-portable to Windows and hard to convert back to traditional
-system/exec/qx. Thus converting an existing tool to it required a
-substantial commitment of time, and using it at all meant a substantial
-commitment of faith.
+system/exec/qx. Thus converting an existing tool to <strong>IPC::ClearTool</strong>
+required a substantial commitment of time, and using it at all meant a
+substantial commitment of faith.
 <p></p></ul>
 <p>I was able to ``port'' <code>IPC::ClearTool</code> to Windows by calling in to the
 ClearCase Automation Library (CAL), a COM interface first available in
@@ -190,7 +190,7 @@ vectors. Thus, while</p>
     Argv-&gt;new('ls', -l');</pre>
 <p>represents an <code>&quot;ls -l&quot;</code> command,</p>
 <pre>
-    ClearCase::Argv-&gt;new('ls', -l');</pre>
+    ClearCase::Argv-&gt;new('ls', -l')-&gt;system;</pre>
 <p>would run <code>&quot;cleartool ls -l&quot;</code>, and it understands that the 'program' part
 of the command line is ``cleartool ci'' (or more properly qw(cleartool ci)).</p>
 <p>The <em>functional interface</em> of <em>Argv</em> is exposed through
@@ -218,6 +218,11 @@ came together with surprising ease. This is the big connection that
 makes it all pretty neat, IMHO, since you get improved speed,
 portability, and ease of use in one package. Without having to make a
 major commitment of rewriting code.</p>
+<p>So, bottom line, <code>ClearCase::Argv</code> now can be told to execute
+cleartool commands via the traditional <code>process spawning</code> model OR via
+any of the specialty APIs out there (<strong>IPC::ClearTool</strong>,
+<strong>ClearCase::CtCmd</strong>, or CAL). Writing to its API sets you free from
+that decision until runtime.</p>
 
 </body>
 

@@ -1,7 +1,7 @@
 =head1 IMPORTANT NOTE
 
 THIS module is called "ClearCase::Argv". There is a DIFFERENT module
-called "Argv". ClearCase::Argv depends on (requires) Argv. More
+called simply "Argv". ClearCase::Argv depends on (requires) Argv. More
 precisely, ClearCase::Argv is a subclass of Argv. Therefore, you must
 download and install BOTH in order for ClearCase::Argv to work.  This
 naming has confused quite a few people so I highlight it here.
@@ -99,7 +99,7 @@ a true "child" process.
 =item *
 
 The interface was/is strange and a little clunky. Not too surprising
-considering that UNIX requires 3 different API's C<(system, exec, and
+considering that UNIX requires 3 different APIs C<(system, exec, and
 backquotes)> to handle child processes; jamming all that functionality
 into one API is awkward.
 
@@ -107,9 +107,9 @@ into one API is awkward.
 
 Due to the above, any script written to the B<IPC::ClearTool> API was
 non-portable to Windows and hard to convert back to traditional
-system/exec/qx. Thus converting an existing tool to it required a
-substantial commitment of time, and using it at all meant a substantial
-commitment of faith.
+system/exec/qx. Thus converting an existing tool to B<IPC::ClearTool>
+required a substantial commitment of time, and using it at all meant a
+substantial commitment of faith.
 
 =back
 
@@ -174,7 +174,7 @@ vectors. Thus, while
 
 represents an C<"ls -l"> command,
 
-    ClearCase::Argv->new('ls', -l');
+    ClearCase::Argv->new('ls', -l')->system;
 
 would run C<"cleartool ls -l">, and it understands that the 'program' part
 of the command line is "cleartool ci" (or more properly qw(cleartool ci)).
@@ -205,3 +205,9 @@ came together with surprising ease. This is the big connection that
 makes it all pretty neat, IMHO, since you get improved speed,
 portability, and ease of use in one package. Without having to make a
 major commitment of rewriting code.
+
+So, bottom line, C<ClearCase::Argv> now can be told to execute
+cleartool commands via the traditional C<process spawning> model OR via
+any of the specialty APIs out there (B<IPC::ClearTool>,
+B<ClearCase::CtCmd>, or CAL). Writing to its API sets you free from
+that decision until runtime.

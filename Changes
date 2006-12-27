@@ -181,3 +181,6 @@ Revision history for Perl extension ClearCase::Argv.
 
 1.23 Sun Oct 29 22:24:53 EST 2006
 	- Bugfix to recent ->pipe code changes.
+
+1.24 Wed Dec 27 11:26:52 EST 2006
+	- No change - dealing with CPAN versioning mistake.

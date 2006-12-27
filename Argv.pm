@@ -1,8 +1,8 @@
 package ClearCase::Argv;
 
-$VERSION = '1.23';
+$VERSION = '1.24';
 
-use Argv 1.17;
+use Argv 1.19;
 
 use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 
