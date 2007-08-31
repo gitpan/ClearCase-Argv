@@ -162,7 +162,7 @@ ClearCase::Argv->new(qw(bogus-command))->dbglevel(1)->stderr(0)->system;
 print q(
 ************************************************************************
 Demonstrate how to use the AUTOLOAD mechanism, which allows you to
-pass the cleartool command as a method name, e.g. "$obj->pwd('-s')".
+pass the cleartool command as a method name, e.g. "$obj->pwv('-s')".
 ************************************************************************
 
 );
@@ -190,17 +190,17 @@ my($rc, $sum1, $sum2, $sum3);
 my $t1 = new Benchmark;
 my $slow = ClearCase::Argv->new('lsview', ['-s'], $view);
 for (1..$reps) { $sum1 += unpack("%32C*", $slow->qx); $rc += $? }
-print ClearCase::Argv->exec_style, " : ";
+printf "%-6s ", ClearCase::Argv->exec_style . ':';
 print timestr(timediff(new Benchmark, $t1), 'noc'), "\n";
 $final += printok($rc == 0);
 
-# See if the coprocess module is available and try it if so.
+# See IPC is available and try it if so.
 if (ClearCase::Argv->ipc(1)) {
     my $t2 = new Benchmark;
     my $fast = ClearCase::Argv->new('lsview', ['-s'], $view);
     $rc = 0;
     for (1..$reps) { $sum2 += unpack("%32C*", $fast->qx); $rc += $? }
-    print ClearCase::Argv->exec_style, " : ";
+    printf "%-6s ", ClearCase::Argv->exec_style . ':';
     print timestr(timediff(new Benchmark, $t2), 'noc'), "\n";
     ClearCase::Argv->ipc(0);		# turn off use of coprocess
     $final += printok($rc == 0);
@@ -214,7 +214,7 @@ if (ClearCase::Argv->ctcmd(1)) {
     my $api = ClearCase::Argv->new('lsview', ['-s'], $view);
     $rc = 0;
     for (1..$reps) { $sum3 += unpack("%32C*", $api->qx); $rc += $? }
-    print ClearCase::Argv->exec_style, " : ";
+    printf "%-6s ", ClearCase::Argv->exec_style . ':';
     print timestr(timediff(new Benchmark, $t3), 'noc'), "\n";
     ClearCase::Argv->ctcmd(0);		# turn off use of CtCmd
     $final += printok($rc == 0);

@@ -19,12 +19,12 @@ print "Func/Exec\n";
 ctsystem(qw(mkattr -replace -nc), $attype, $atval, $ccobj);
 
 # Demo: making string-valued attrs in IPC::ClearTool style.
-if (ClearCase::Argv->ipc_cleartool(2)) {
+if (ClearCase::Argv->ipc(2)) {
     print "OO/IPC\n";
     ClearCase::Argv->mkattr(qw(-replace -nc), $attype, $atval, $ccobj)->system;
     print "Func/IPC\n";
     ctsystem(qw(mkattr -replace -nc), $attype, $atval, $ccobj);
-    ClearCase::Argv->ipc_cleartool(0);
+    ClearCase::Argv->ipc(0);
 }
 
 # Demo: making string-valued attrs in ClearCase::CtCmd style.

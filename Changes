@@ -184,3 +184,20 @@ Revision history for Perl extension ClearCase::Argv.
 
 1.24 Wed Dec 27 11:26:52 EST 2006
 	- No change - dealing with CPAN versioning mistake.
+
+1.25 Tue Jul 31 16:44:44 EDT 2007
+	- Significant change - removed dependence on IPC::ClearTool.
+	  Still implements the same IPC interface but now using
+	  pure perl. There may be some differences in quoting
+	  behavior in edge cases - time will tell. One known but
+	  minor incompatibility is that the method formerly
+	  known as ->ipc_cleartool() and often abbreviated as
+	  ->ipc() is now known only as ->ipc(). The long name
+	  is no longer valid. On the other hand, signal handling
+	  ought to be more normal because there's no longer any
+	  messing around with process groups and sessions as was
+	  present in the XS code of IPC::ClearTool.
+	- Minor speedup - the ->ctcmd method was loading CtCmd
+	  even when used only to check whether CtCmd was in use. It
+	  is now loaded only if it plans to use it. This is significant
+	  because CtCmd in turn loads a large number of DLLs.

@@ -25,7 +25,7 @@ Unix and Windows.
 - envp: Shows how to use the ->envp method to control the environment
 of a child process.
 
-- setview: demo of an inline setview in a script using IPC::ClearTool.
+- setview: demo of an inline setview in a script using IPC mode.
 This isn't possible with traditional fork/exec. It is possible with
 CtCmd too.
 

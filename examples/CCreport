@@ -154,7 +154,7 @@ if ($opt{user}) {
 }
 
 # Must go into "ipc" mode in order to retain setview/cd/etc state.
-$ct->ipc_cleartool(3);
+$ct->ipc(3);
 
 # First we need a view to work through.
 $ct->setview($vtag)->system;
@@ -586,6 +586,6 @@ under the same terms as Perl itself.
 
 =head1 SEE ALSO
 
-perl(1), ClearCase::Argv, Argv, IPC::ClearTool
+perl(1), ClearCase::Argv, Argv
 
 =cut

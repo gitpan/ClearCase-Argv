@@ -1,8 +1,8 @@
 package ClearCase::Argv;
 
-$VERSION = '1.24';
+$VERSION = '1.25';
 
-use Argv 1.19;
+use Argv 1.22;
 
 use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 
@@ -74,19 +74,28 @@ sub prog {
     }
 }
 
-# Overridden to allow for CtCmd mode.
+# Overridden to allow for alternate execution modes.
 sub exec {
     $class->new(@_)->exec if !ref($_[0]) || ref($_[0]) eq 'HASH';
     my $self = shift;
-    return $self->SUPER::exec(@_) unless $self->ctcmd;
-    exit $self->system(@_);
+    if ($self->ctcmd) {
+	exit $self->system(@_) >> 8;
+    } elsif ($self->ipc) {
+	my $rc = $self->system(@_);
+	$rc ||= $self->ipc(0);
+	exit($rc);
+    } else {
+	return $self->SUPER::exec(@_);
+    }
 }
 
-# Overridden to allow for CtCmd mode.
+# Overridden to allow for alternate execution modes.
 sub system {
     return $class->new(@_)->system if !ref($_[0]) || ref($_[0]) eq 'HASH';
     my $self = shift;
-    return $self->SUPER::system(@_) unless $self->ctcmd;
+
+    return $self->SUPER::system(@_) unless $self->ctcmd || $self->ipc;
+
     my $envp = $self->envp;
     my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
     $self->args($self->glob) if $self->autoglob;
@@ -115,7 +124,7 @@ sub system {
 	warn "Warning: illegal value '$ofd' for stdout" if $ofd > 2;
 	$outplace = -1 if $ofd == 0;
     }
-    $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
+    $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg && $self->ctcmd;
     if ($efd == 1) {
 	open(STDERR, '>&STDOUT') || warn "Can't dup stderr";
     } elsif ($efd !~ m%^\d*$%) {
@@ -124,27 +133,37 @@ sub system {
 	warn "Warning: illegal value '$efd' for stderr" if $efd > 2;
 	$errplace = -1 if $efd == 0;
     }
-    my $ctc = ClearCase::CtCmd->new(outfunc=>$outplace, errfunc=>$errplace);
-    if ($envp) {
-	local %ENV = %$envp;
-	$ctc->exec(@cmd);
+    my $rc = 0;
+    if ($self->ctcmd) {
+	my $ctc = ClearCase::CtCmd->new(outfunc=>$outplace, errfunc=>$errplace);
+	if ($envp) {
+	    local %ENV = %$envp;
+	    $ctc->exec(@cmd);
+	} else {
+	    $ctc->exec(@cmd);
+	}
+	$rc = $ctc->status;
     } else {
-	$ctc->exec(@cmd);
+	$rc = $self->_ipc_cmd(undef, @cmd);
     }
-    my $rc = $ctc->status;
-    $? = $rc;
     open(STDOUT, '>&_O'); close(_O);
     open(STDERR, '>&_E'); close(_E);
     print STDERR "+ (\$? == $?)\n" if $dbg > 1;
     $self->fail($self->syfail) if $rc;
+    $? = $rc;
     return $rc;
 }
 
-# Overridden to allow for CtCmd mode.
+# Overridden to allow for alternate execution modes.
 sub qx {
     return $class->new(@_)->qx if !ref($_[0]) || ref($_[0]) eq 'HASH';
     my $self = shift;
-    return $self->SUPER::qx(@_) unless $self->ctcmd;
+
+    return $self->SUPER::qx(@_) unless $self->ctcmd || $self->ipc;
+
+    my($rc, $data, $errors);
+    my $dbg = $self->dbglevel;
+
     my $envp = $self->envp;
     my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
     $self->args($self->glob) if $self->autoglob;
@@ -153,70 +172,108 @@ sub qx {
     my @opts = $self->_sets2opts(@_);
     my @args = @{$self->{AV_ARGS}};
     my @cmd = (@prog, @opts, @args);
-    my $dbg = $self->dbglevel;
     $self->_addstats("cleartool @prog", scalar @args) if defined %Argv::Summary;
     $self->warning("cannot close stdin of child process") if $ifd;
     if ($self->noexec && !$self->_read_only) {
 	$self->_dbg($dbg, '-', \*STDERR, @cmd);
 	return 0;
     }
-    $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg;
-    my $ctc = ClearCase::CtCmd->new;
-    my($rc, $data, $errors);
-    if ($envp) {
-	local %ENV = %$envp;
-	($rc, $data, $errors) = $ctc->exec(@cmd);
+    $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg && $self->ctcmd;
+    if ($self->ctcmd) {
+	my $ctc = ClearCase::CtCmd->new;
+	if ($envp) {
+	    local %ENV = %$envp;
+	    ($rc, $data, $errors) = $ctc->exec(@cmd);
+	} else {
+	    ($rc, $data, $errors) = $ctc->exec(@cmd);
+	}
+	$data ||= '';
+	if ($errors) {
+	    if ($efd == 1) {
+		$data .= $errors;
+	    } elsif ($efd == 2) {
+		print STDERR $errors;
+	    }
+	}
+	print STDERR "+ (\$? == $?)\n" if $dbg > 1;
+	if (wantarray) {
+	    my @data = split /\n/, $data;
+	    if (! $self->autochomp) {
+		for (@data) { $_ .= "\n" }
+	    }
+	    $self->unixpath(@data) if MSWIN && $self->outpathnorm;
+	    print map {"+ <- $_"} @data if @data && $dbg >= 2;
+	    if ($rc) {
+		$self->lastresults($rc, @data);
+		$self->fail($self->qxfail);
+	    }
+	    $? = $rc;
+	    return @data;
+	} else {
+	    chomp($data) if $self->autochomp;
+	    $self->unixpath($data) if MSWIN && $self->outpathnorm;
+	    print "+ <- $data" if $data && $dbg >= 2;
+	    if ($rc) {
+		$self->lastresults($rc, $data);
+		$self->fail($self->qxfail);
+	    }
+	    $? = $rc;
+	    return $data;
+	}
     } else {
-	($rc, $data, $errors) = $ctc->exec(@cmd);
-    }
-    $? = $rc;
-    $data ||= '';
-    if ($errors) {
-    	if ($efd == 1) {
-	    $data .= $errors;
-    	} elsif ($efd == 2) {
-	    print STDERR $errors;
-    	}
-    }
-    print STDERR "+ (\$? == $?)\n" if $dbg > 1;
-    if (wantarray) {
-	my @data = split /\n/, $data;
-	if (! $self->autochomp) {
-	    for (@data) { $_ .= "\n" }
+	my @data = ();
+	$rc = $self->_ipc_cmd(\@data, @cmd);
+	print STDERR "+ (\$? == $?)\n" if $dbg > 1;
+	if (wantarray) {
+	    chomp(@data) if $self->autochomp;
+	    $self->unixpath(@data) if MSWIN && $self->outpathnorm;
+	    if ($rc) {
+		$self->lastresults($rc, @data);
+		$self->fail($self->qxfail);
+	    }
+	    $? = $rc;
+	    return @data;
+	} else {
+	    my $data = "@data";
+	    chomp($data) if $self->autochomp;
+	    $self->unixpath($data) if MSWIN && $self->outpathnorm;
+	    if ($rc) {
+		$self->lastresults($rc, $data);
+		$self->fail($self->qxfail);
+	    }
+	    $? = $rc;
+	    return $data;
 	}
-	$self->unixpath(@data) if MSWIN && $self->outpathnorm;
-	print map {"+ <- $_"} @data if @data && $dbg >= 2;
-	if ($rc) {
-	    $self->lastresults($rc, @data);
-	    $self->fail($self->qxfail);
-	}
-	return @data;
-    } else {
-	chomp($data) if $self->autochomp;
-	$self->unixpath($data) if MSWIN && $self->outpathnorm;
-	print "+ <- $data" if $data && $dbg >= 2;
-	if ($rc) {
-	    $self->lastresults($rc, $data);
-	    $self->fail($self->qxfail);
-	}
-	return $data;
     }
 }
 
-# Overridden to allow for CtCmd mode.
+# Overridden to allow special handling for CtCmd and IPC modes.
 sub pipe {
     return $class->new(@_)->pipe if !ref($_[0]) || ref($_[0]) eq 'HASH';
 
     my $self = shift;
 
-    my $otherSelf = $self;
-    if ($self->ctcmd || $self->ipc) {
-	$otherSelf = $self->clone();
-	$self->warning("CtCmd/IPC usage incompatible with pipe - temporarily reverting to plain cleartool...") if $self->dbglevel;
+    if ($self->ctcmd) {
+	my $otherSelf = $self->clone();
+	$self->warning("CtCmd usage incompatible with pipe - temporarily reverting to plain cleartool") if $self->dbglevel;
 	$otherSelf->prog($ct, $self->prog);
+	return $otherSelf->SUPER::pipe(@_);
+    } elsif ($self->ipc) {
+	my $cb = $self->pipecb;
+	$self->error("No callback supplied") unless ref($cb) eq 'CODE';
+	$self->args($self->glob) if $self->autoglob;
+	my @prog = @{$self->{AV_PROG}};
+	shift(@prog) if $prog[0] =~ m%cleartool%;
+	my @opts = $self->_sets2opts(@_);
+	my @args = @{$self->{AV_ARGS}};
+	my @cmd = (@prog, @opts, @args);
+	$self->_addstats("cleartool @prog", scalar @args)
+	    if defined %Argv::Summary;
+	my $rc = $self->_ipc_cmd($cb, @cmd);
+	return $rc;
+    } else {
+	return $self->SUPER::pipe(@_);
     }
-
-    return $otherSelf->SUPER::pipe(@_);
 }
 
 # Normalizes a path to Unix style (forward slashes).
@@ -239,7 +296,9 @@ sub ctcmd {
     my $self = shift;	# this might be an instance or a classname
     my $level = shift;
     $level = 2 if !defined($level) && !defined(wantarray);
-    eval { require ClearCase::CtCmd };
+    if (defined $level) {
+	eval { require ClearCase::CtCmd };
+    }
     if ($@ && defined($level)) {
 	my $msg = $@;
 	if ($level == 2 && $msg =~ m%^(Can't locate \S+)%) {
@@ -357,98 +416,96 @@ sub _ctcmd_cmd2cal {
     }
 }
 
-# Starts or stops an IPC::ClearTool coprocess.
+# Starts or stops a cleartool coprocess.
 sub ipc {
     my $self = shift;	# this might be an instance or a classname
+    no strict 'refs';	# because $self may be a symbolic hash ref
     my $level = shift;
     if (defined($level) && !$level) {
-	return $self->ipc_childsafe(0);	# close up shop
+	# Close up shop
+	return 0 unless exists($self->{IPC});
+	my $rc = close($self->{IPC}->{DOWN});
+	waitpid($self->{IPC}->{PID}, 0);
+	delete $self->{IPC};
+	return $rc || $?;
     } elsif (!defined($level) && defined(wantarray)) {
-	return $self->ipc_childsafe; # return the active ChildSafe object
+	return exists($self->{IPC}) ? $self : 0;
     }
+
     if ($self->ctcmd) {
 	$self->ctcmd(0);	# shut down the CtCmd connection
     }
-    my $chk = sub { return int grep /Error:\s/, @{$_[0]} };
-    my %params = ( CHK => $chk, QUIT => 'exit' );
-    my @args = ($ct, 'pwd -h', 'Usage: pwd', \%params);
-    eval { require IPC::ChildSafe };
-    if (!$@) {
-	local $@;
-	IPC::ChildSafe->VERSION(3.16);
-	if (MSWIN) {
-	    require Win32::OLE;
-	    no strict 'subs';
-	    local $^W = 0;
-	    package IPC::ChildSafe;
-	    $IPC::ChildSafe::VERSION = '3.16';
-	    *IPC::ChildSafe::_open = sub {
-		my $self = shift;
-		$self->{IPC_CHILD} = Win32::OLE->new('ClearCase.ClearTool')
-			    || die "Cannot create ClearCase.ClearTool object\n";
-		Win32::OLE->Option(Warn => 0);
-		return $self;
-	    };
-	    *IPC::ChildSafe::_puts = sub {
-		my $self = shift;
-		my $cmd = shift;
-		my $dbg = $self->{DBGLEVEL} || 0;
-		warn "+ -->> $cmd\n" if $dbg;
-		my $out = $self->{IPC_CHILD}->CmdExec($cmd);
-		# CmdExec always returns a scalar through Win32::OLE so
-		# we have to split it in case it's really a list.
-		if ($out) {
-		    my @stdout = $self->_fixup_COM_scalars($out);
-		    push(@{$self->{IPC_STDOUT}}, @stdout);
-		    print STDERR map {"+ <<-- $_"} @stdout if $dbg > 1;
-		}
-		if (my $err = Win32::OLE->LastError) {
-		    $err =~ s/OLE exception from.*?:\s*//;
-		    my @stderr = $self->_fixup_COM_scalars($err);
-		    @stderr = grep !/Unspecified error/is, @stderr;
-		    print STDERR map {"+ <<== $_"} @stderr if $dbg > 1;
-		    push(@{$self->{IPC_STDERR}},
-				    map {"cleartool: Error: $_"} @stderr);
-		}
-		return $self;
-	    };
-	    *IPC::ChildSafe::finish = sub {
-		my $self = shift;
-		undef $self->{IPC_CHILD};
-		return 0;
-	    };
-	} else {
-	    no strict 'subs';
-	    local $^W = 0;
-	    package IPC::ChildSafe;
-	    *_puts = sub {
-		my $self = shift;
-		my $cmd = shift;
-		child_puts($cmd, ${$self->{IPC_CHILD}},
-				   $self->{IPC_STDOUT}, $self->{IPC_STDERR});
-		# Special case - throw away comment prompt from stderr.
-		shift @{$self->{IPC_STDERR}} if $self->stdin &&
-				${$self->{IPC_STDERR}}[0] =~ /Comment.*:$/;
-		return $self;
-	    };
-	}
-    }
-    if ($@ || !defined $self->ipc_childsafe(@args)) {
-	if (!defined($level)) {
-	    warn("Warning: $@\n");
-	} elsif ($level == 1 || $level == 2) {
-	    if ($@ =~ m%^(Can't locate \S+)%) {
-		$@ = $1;
-	    }
-	    warn("Warning: $@, using CtCmd instead\n") if $level == 2;
-	    return $self->ctcmd($level);
-	} else {
-	    die("Error: $@");
-	}
-    }
+
+    # This should never fail to load since it's built in.
+    require IPC::Open3;
+
+    my $ct = MSWIN ?
+	'cleartool' :
+	join('/', $ENV{ATRIAHOME}||'/opt/rational/clearcase', 'bin/cleartool');
+
+    # Dies on failure.
+    my($down, $back);
+    my $pid = IPC::Open3::open3($down, $back, undef, 'cleartool', '-status');
+
+    $self->{IPC}->{DOWN} = $down;
+    $self->{IPC}->{BACK} = $back;
+    $self->{IPC}->{PID} = $pid;
+
     return $self;
 }
-*ipc_cleartool = \&ipc;
+
+sub _ipc_cmd {
+    my $self = shift;
+    my $disposition = shift;
+
+    # Handle verbosity.
+    my $dbg = $self->dbglevel;
+    $self->_dbg($dbg, '=>', \*STDERR, @_) if $dbg;
+
+    # Send the command to cleartool.
+    my $cmd = "@_";
+    chomp $cmd;
+    my $down = $self->{IPC}->{DOWN};
+    print $down $cmd, "\n";
+
+    # Supply custom comment on standard input if requested.
+    if (exists $self->{IPC}->{COMMENT}) {
+	my $input = $self->{IPC}->{COMMENT};
+	print $down $input, "\n.\n";
+	delete $self->{IPC}->{COMMENT};
+    }
+
+    # Read back the results and get command status.
+    my $rc = 0;
+    my $back = $self->{IPC}->{BACK};
+    while($_ = <$back>) {
+	if (m%^Command \d+ returned status (\d+)%) {
+	    # Shift it up so it looks like an exit status.
+	    $rc = $1 << 8;
+	    last;
+	}
+	print '+ <=', $_ if $_ && $dbg >= 2;
+	chomp if $self->autochomp;
+	if ($disposition) {
+	    if (ref($disposition) eq 'CODE') {
+		my $keepGoing = &$disposition($_);
+		next if $keepGoing;
+		if ($self->_read_only) {
+		    kill HUP => $self->{IPC}->{PID};
+		    $rc = $self->ipc(0);
+		    last;
+		}
+		$self->warning("Not abortable unless readonly - continuing!");  
+	    } else {
+		push(@$disposition, $_);
+	    }
+	} else {
+	    print;
+	}
+    }
+
+    return $rc;
+}
 
 sub fork_exec {
     my $self = shift;
@@ -492,20 +549,19 @@ sub _read_only {
 # shell so we subclass the quoting method to deal with it. Not
 # currently well tested with esoteric cmd lines such as mkattr.
 ## THIS STUFF IS REALLY COMPLEX WITH ALL THE PERMUTATIONS
-## OF PLATFORMS, SUBCLASSES, SHELLS, AND API'S. WATCH OUT.
+## OF PLATFORMS, SUBCLASSES, SHELLS, AND APIs. WATCH OUT.
 sub quote {
     my $self = shift;
     # Don't quote the 2nd word where @_ = ('cleartool', 'pwv -s');
     return @_ if @_ == 2;
-    # If IPC::ChildSafe not in use, protect against the shell.
-    return $self->SUPER::quote(@_) if @_ > 2 && !$self->ipc_childsafe;
+    return $self->SUPER::quote(@_) if @_ > 2;
     # Ok, now we're looking at interactive-cleartool quoting ("man cleartool").
-    if (!MSWIN) {
+    if (!MSWIN && $self->ipc) {
 	# Special case - extract multiline comments from the cmd line and
 	# put them in the stdin stream when using UNIX co-process model.
 	for (my $i=0; $i < $#_; $i++) {
 	    if ($_[$i] eq '-c' && $_[$i+1] =~ m%\n%s) {
-		$self->ipc_childsafe->stdin("$_[$i+1]\n.");
+		$self->stdin("$_[$i+1]\n.");
 		splice(@_, $i, 2, '-cq');
 		last;
 	    }
@@ -526,18 +582,17 @@ sub quote {
 }
 
 # Hack - allow a comment to be registered here. The next command will
-# see it with -c "comment" if in regular mode or -cq and reading the
-# comment from stdin if in ->ipc mode.
+# see it with -c "comment" if in regular mode or with -cq and reading
+# the comment from stdin if in ->ipc mode.
 sub comment {
     my $self = shift;
-    my $cmnt = shift;
-    my $csafe = $self->ipc_childsafe;
+    my $cmnt = join("\n", @_);
     my @prev = $self->opts;
-    if ($csafe) {
-	$self->opts('-cq', $self->opts) if !grep /^-cq/, @prev;
-	$csafe->stdin("$cmnt\n.");
+    if ($self->ipc) {
+	$self->opts('-cq', @prev) if !grep /^-cq/, @prev;
+	$self->{IPC}->{COMMENT} = $cmnt;
     } else {
-	$self->opts('-c', $cmnt, $self->opts) if !grep /^-c/, @prev;
+	$self->opts('-c', $cmnt, @prev) if !grep /^-c/, @prev;
     }
     return $self;
 }
@@ -545,7 +600,7 @@ sub comment {
 # Add -/ipc and -/ctcmd to list of supported attr-flags.
 sub attropts {
     my $self = shift;
-    return $self->SUPER::attropts(@_, qw(ipc_cleartool ctcmd));
+    return $self->SUPER::attropts(@_, qw(ipc ctcmd));
 }
 
 # Export our own functional interfaces as well.
@@ -601,17 +656,16 @@ I<ClearCase::Argv> is a subclass of I<Argv> for use with ClearCase.  It
 exists to provide an abstraction layer over the I<cleartool>
 command-line interface. A program written to this API can be told to
 send commands to ClearCase via the standard technique of executing
-cleartool or via the ClearCase::CtCmd or IPC::ClearTool modules (see)
-by flipping a switch.
+cleartool or via the ClearCase::CtCmd module or via a pipe to cleartool
+(aka C<IPC mode>) by flipping a switch.
 
 To that end it provides a couple of special methods I<C<ctcmd>> and
 I<C<ipc>>. The C<ctcmd> method can be used to cause cleartool commands
 to be run in the current process space using I<ClearCase::CtCmd>.
-Similarly, C<ipc> will send commands to a cleartool co-process using
-the I<IPC::ClearTool> module.  See the documentation of these modules
-for details on what they do, and see I<ALTERNATE EXECUTION INTERFACES>
-below for how to invoke them. Sample scripts are packaged with
-I<ClearCase::Argv> in ./examples.
+Similarly, C<ipc> will send commands to a cleartool co-process.  See
+the documentation of these modules for details on what they do, and see
+I<ALTERNATE EXECUTION INTERFACES> below for how to invoke them. Sample
+scripts are packaged with I<ClearCase::Argv> in ./examples.
 
 I<As ClearCase::Argv is in most other ways identical to its base
 class>, see C<perldoc Argv> for substantial further documentation.>
@@ -626,20 +680,20 @@ semantics. These include:
 =item * prog
 
 I<ClearCase::Argv-E<gt>prog> prepends the word C<cleartool> to each
-command line when in standard (not ClearCase::CtCmd or IPC::ClearTool)
+command line when in standard (not C<-E<gt>ctcmd> or C<-E<gt>ipc>)
 mode.
 
 =item * quote
 
 The cleartool "shell" has its own quoting rules. Therefore, when using
-ClearCase::CtCmd or IPC::ClearTool modes, command-line quoting must be
+C<-E<gt>ctcmd> or C<-E<gt>ipc> modes, command-line quoting must be
 adjusted to fit cleartool's rules rather than those of the native
 system shell, so the C<-E<gt>quote> method is extended to handle that
 case.
 
 =item * readonly
 
-It's often useful to set the following class attribute:
+It's sometimes useful to set the following class attribute:
 
     ClearCase::Argv->readonly('auto');
 
@@ -647,23 +701,24 @@ This does nothing by itself but it modifies the behavior of the
 I<-E<gt>noexec> attribute: instead of skipping execution of all
 commands, it only skips commands which modify ClearCase state.
 
-Consider a script which does an C<lsview> to see if a view exists
+Consider a script which does an C<lsview> to see if view XYZ exists
 followed by a C<mkview> to create it if not, and has a I<-n> flag to
 say C<show what you would do without doing it>, implemented internally
-by setting I<-E<gt>noexec>. Without the C<readonly=auto>, it wouldn't
-even do the lsview so you can't find out if it would do the mkview.
-With it, however, the lsview would be performed while the mkview would
-be shown but skipped as intended.  This causes scripts to behave far
-more realistically in I<-E<gt>noexec> mode.
+by setting I<-E<gt>noexec>. Without this setting it wouldn't even do
+the lsview so you can't find out if it would do the mkview.  With it,
+however, the lsview would be performed while the mkview would be shown
+but skipped as intended.  Running C<read> commands while skipping
+C<write> commands causes scripts to behave far more realistically in
+I<-E<gt>noexec> mode.
 
 =item * outpathnorm
 
-On Windows, cleartool's way of handling pathnames is underdocumented
-and complex. Apparently, given a choice, cleartool on Windows always
-prefers and uses the native (\-separated) format. Though it will
-understand and (mostly) preserve /-separated pathnames, any path
-information it I<adds> (notably version-extended data) is B<always>
-\-separated. For example:
+On Windows, cleartool's way of handling pathnames is underdocumented,
+complex, and arguably broken. Apparently, given a choice, cleartool on
+Windows always prefers and uses the native (\-separated) format. Though
+it will understand and (mostly) preserve /-separated pathnames, any
+path information it I<adds> (notably version-extended data) is
+B<always> \-separated. For example:
 
     cleartool ls -s -d x:/vobs_xyz/foo/bar
 
@@ -671,9 +726,11 @@ will return something like
 
     x:/vobs_xyz/foo\bar@@\main\3
 
-Note that the early forward slashes are retained but the last /
-before the C<@@> becomes a \ for some reason, perhaps just a bug in
-I<ls>). And all version info after the C<@@> uses \.
+Note that the early forward slashes are retained but the last / before
+the C<@@> becomes a \, while all version info after the C<@@> uses \.
+It looks like CC splits the path into dirname and basename, does
+whatever it's asked to do, then pastes the path back together using the
+native separator character before printing it.
 
 Normalizing pathnames is difficult because there's no way to determine
 with certainty which lines in the output of a cleartool command are
@@ -699,6 +756,30 @@ in the extended naming symbol from C<@@>.
 In summary, I<ClearCase::Argv-E<gt>outpathnorm> will normalize (a) all
 version-extended pathnames and (b) paths of any type which are alone on
 a line and refer to an existing filesystem object.
+
+=back
+
+=head2 ADDITIONAL METHODS
+
+These are methods not offered by I<Argv>.
+
+=over 4
+
+=item * comment
+
+Any text passed to the C<-E<gt>comment> method will be provided to the
+next cleartool command as a comment. E.g.:
+
+    ClearCase::Argv->ci('foo')->comment("Multi-line\nComment")->system;
+
+This is useful because it takes care of the quoting and other
+machinations necessary to deal with the different execution methods.
+For instance in IPC mode the comment will be fed to cleartool on stdin
+whereas in exec mode it will be passsed on the command line.  When
+supplying text via the comment method it is your responsibility to
+ensure that the very next command is one which takes a standard
+ClearCase comment. You may also want to turn off stdout for the same
+command in order to suppress the comment prompt.
 
 =back
 
@@ -735,25 +816,25 @@ Typically C<-E<gt>ctcmd> will be used as a class method to specify a
 place for all cleartool commands to be sent. However, it may also be
 invoked on an object to associate just that instance with CtCmd.
 
-A similar sequence is observed for IPC::ClearTool except for the
+A similar sequence is observed for C<-E<gt>ipc mode> except for the
 different method name, e.g.:
 
-    # Use IPC::ClearTool if available, else print warning and use CAL
-    ClearCase::Argv->ipc(1);
+    # Use IPC if available, else abort
+    ClearCase::Argv->ipc(3);
 
 Note: you can tell which mode is in use by turning on the I<dbglevel>
 attribute. Verbosity styles are as follows:
 
     + cleartool pwv		# standard (fork/exec)
     +> pwv			# CtCmd
-    -->> pwv			# IPC::ClearTool
+    => pwv			# IPC
 
-Neither of these modes are compatible with the I<-E<gt>ctpipe> method.
+CtCmd mode is not compatible with the I<-E<gt>ctpipe> method.
 Therefore, when a pipe is requested it will result in a new process
 created by the traditional execution interface.
 
-A final note on these two: turning on one mode will automatically, and
-silently, turn off the other. I.e. the sequence
+A final note on IPC and CtCmd modes: turning on one will automatically,
+and silently, turn off the other. I.e. the sequence
 
     ClearCase::Argv->ipc(2);
     ClearCase::Argv->ctcmd(2);
@@ -769,7 +850,7 @@ available as traditional functions. Examples:
 
 	use ClearCase::Argv qw(ctsystem ctexec ctqx ctpipe);
 	my $cwv = ctqx(pwv -s);
-	ctsystem('mklbtype', ['-global'], 'FOO') && exit $?>>8;
+	ctsystem('mklbtype', ['-global'], 'FOO') && exit $? >> 8;
 	my @vobs = ctqx({autochomp=>1}, 'lsvob -s');
 	ctpipe('lsview', ['-l'], sub { print "GOT: " . shift() . "\n"; 1 });
 
@@ -822,18 +903,19 @@ reports or patches gratefully accepted.
 
 =head1 PORTABILITY
 
-ClearCase::Argv should work on all ClearCase platforms. It's primarily
-maintained on Solaris 9 and Windows XP with CC 7.0, using Perl5.8.x.
+ClearCase::Argv should work on all supported ClearCase platforms and
+versions. It's currently maintained on Solaris 9 and Windows XP with CC
+7.0 using Perl5.8.x.  Viability on other platforms and/or earlier
+versions is untestable by me.
 
 =head1 FILES
 
-This is a subclass of I<Argv> and thus requires it to be installed.  In
-order to run in I<ipc mode> it will also need IPC::ClearTool.
-Similarly, ClearCase::CtCmd is required for I<ctcmd mode>.
+This is a subclass of I<Argv> and thus requires I<Argv> to be
+installed.  ClearCase::CtCmd is required for I<ctcmd mode>.
 
 =head1 SEE ALSO
 
-perl(1), Argv, IPC::ClearTool, IPC::ChildSafe
+perl(1), Argv, ClearCase::CtCmd
 
 =head1 AUTHOR
 
@@ -841,7 +923,7 @@ David Boyce <dsbperl AT boyski.com>
 
 =head1 COPYRIGHT
 
-Copyright (c) 1999-2006 David Boyce. All rights reserved.  This Perl
+Copyright (c) 1999-2007 David Boyce. All rights reserved.  This Perl
 program is free software; you may redistribute it and/or modify it
 under the same terms as Perl itself.
 

@@ -9,7 +9,7 @@
 
 use ClearCase::Argv;
 
-ClearCase::Argv->ipc_cleartool;
+ClearCase::Argv->ipc;
 ClearCase::Argv->autochomp;
 
 my $ct_file	= ClearCase::Argv->new('file');

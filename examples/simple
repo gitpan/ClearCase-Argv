@@ -37,9 +37,9 @@ ClearCase::Argv->pwv->system;
 
 ClearCase::Argv->pwv->ctcmd(2)->system;
 
-# And also with IPC::ClearTool (though this is deprecated in favor of CtCmd).
+# And also with IPC mode.
 
-ClearCase::Argv->pwv->ipc_cleartool(2)->system;
+ClearCase::Argv->pwv->ipc(2)->system;
 
 # New section ...
 print "\n", '='x60, "\n", "Flags:\n", '='x60, "\n";
@@ -62,4 +62,4 @@ print @results;
 ClearCase::Argv->autochomp(1);
 
 @results = ClearCase::Argv->pwv(['-s'])->qx;
-print @results;
+print '=', @results, "=\n";
