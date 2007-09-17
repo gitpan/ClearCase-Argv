@@ -201,3 +201,9 @@ Revision history for Perl extension ClearCase::Argv.
 	  even when used only to check whether CtCmd was in use. It
 	  is now loaded only if it plans to use it. This is significant
 	  because CtCmd in turn loads a large number of DLLs.
+
+1.26 Fri Sep 14 10:03:40 EDT 2007
+	- Fixed Windows bugs reported by James Anderson.
+	  Bugs remain, particularly in the area of quoting for
+	  IPC mode on Windows, but this version is released
+	  because it is far better on Windows than the previous.

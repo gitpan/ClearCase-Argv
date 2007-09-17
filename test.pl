@@ -172,7 +172,9 @@ $x->lslock('-s')->system;
 
 print "\n\tTHIS SPACE INTENTIONALLY LEFT BLANK :-)\n";
 
-my $reps = $ENV{CCARGV_TEST_REPS} || 50; print qq(
+my $reps = $ENV{CCARGV_TEST_REPS} || 50;
+
+print qq(
 ************************************************************************
 The following test doubles as a benchmark. It compares $reps
 invocations of "cleartool lsview -s" using a fork/exec (`cmd`) style
@@ -194,7 +196,7 @@ printf "%-6s ", ClearCase::Argv->exec_style . ':';
 print timestr(timediff(new Benchmark, $t1), 'noc'), "\n";
 $final += printok($rc == 0);
 
-# See IPC is available and try it if so.
+# See if IPC is available (should be always) and time it if so.
 if (ClearCase::Argv->ipc(1)) {
     my $t2 = new Benchmark;
     my $fast = ClearCase::Argv->new('lsview', ['-s'], $view);
@@ -208,7 +210,7 @@ if (ClearCase::Argv->ipc(1)) {
 						    if printok($sum1 == $sum2);
 }
 
-# See if the ClearCase::CtCmd module is available and try it if so.
+# See if the ClearCase::CtCmd module is available and time it if so.
 if (ClearCase::Argv->ctcmd(1)) {
     my $t3 = new Benchmark;
     my $api = ClearCase::Argv->new('lsview', ['-s'], $view);
@@ -256,10 +258,10 @@ $final += printok(1);
 
 print qq(
 ************************************************************************
-NOTE: in a very small vob, the results above may be in favor of qx due
-to the fact that pipe introduces some overhead (particularly on Windows).
+NOTE: in a very small vob, the results above may be in favor of qx due to
+the fact that pipe introduces a constant overhead (particularly on Windows).
 
-Last, we'll use the 'summary' class method to see what cmds were run:
+Before ending we'll use the 'summary' class method to see what cmds were run:
 ************************************************************************
 
 );

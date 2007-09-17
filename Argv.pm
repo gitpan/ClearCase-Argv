@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.25';
+$VERSION = '1.26';
 
 use Argv 1.22;
 
@@ -422,9 +422,11 @@ sub ipc {
     no strict 'refs';	# because $self may be a symbolic hash ref
     my $level = shift;
     if (defined($level) && !$level) {
-	# Close up shop
+	# Send an explicit "exit" command and close up shop.
 	return 0 unless exists($self->{IPC});
-	my $rc = close($self->{IPC}->{DOWN});
+	my $down = $self->{IPC}->{DOWN};
+	print $down "exit\n";
+	my $rc = close($down);
 	waitpid($self->{IPC}->{PID}, 0);
 	delete $self->{IPC};
 	return $rc || $?;
@@ -446,6 +448,9 @@ sub ipc {
     # Dies on failure.
     my($down, $back);
     my $pid = IPC::Open3::open3($down, $back, undef, 'cleartool', '-status');
+
+    # Set the "line discipline" to convert CRLF to \n.
+    binmode $back, ':crlf';
 
     $self->{IPC}->{DOWN} = $down;
     $self->{IPC}->{BACK} = $back;
@@ -480,7 +485,7 @@ sub _ipc_cmd {
     my $back = $self->{IPC}->{BACK};
     while($_ = <$back>) {
 	if (m%^Command \d+ returned status (\d+)%) {
-	    # Shift it up so it looks like an exit status.
+	    # Shift the status up so it looks like an exit status.
 	    $rc = $1 << 8;
 	    last;
 	}
@@ -609,6 +614,12 @@ sub ctexec	{ return __PACKAGE__->new(@_)->exec }
 sub ctqx	{ return __PACKAGE__->new(@_)->qx }
 sub ctpipe	{ return __PACKAGE__->new(@_)->pipe }
 *ctqv = \&ctqx;  # just for consistency
+
+# Clean up leftover cleartool processes if user forgot to.
+sub DESTROY {
+    my $self = shift;
+    $self->ipc(0) if $self->ipc;
+}
 
 1;
 
