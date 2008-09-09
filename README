@@ -33,17 +33,15 @@ For any script which uses ClearCase::Argv, the 'ipc' class method
 
 	ClearCase::Argv->ipc;
 
-will start B<cleartool> as an B<IPC::ClearTool> co-process and arrange to
-send all subsequent system/exec/qx commands to it instead of forking a
-new child process each time. This can speed up scripts by anywhere
-between 1 (i.e. not at all) and 10 times by my measurements.
-
-However, the CtCmd interface (below) is generally preferred nowadays.
+will start B<cleartool> as a co-process and arrange to send all
+subsequent system/exec/qx commands to it instead of forking a new child
+process each time. This can speed up scripts by anywhere between 1
+(i.e. not at all) and 10 times by my measurements.
 
 =item * CtCmd Interface for Speed
 
-Just as with B<IPC::ClearTool>, ClearCase::Argv can also be told to
-process commands via B<ClearCase::CtCmd>
+As an alternative to IPC mode, ClearCase::Argv can also be told to
+process commands via B<ClearCase::CtCmd>.
 
 =item * Convenience Features
 
@@ -206,8 +204,14 @@ makes it all pretty neat, IMHO, since you get improved speed,
 portability, and ease of use in one package. Without having to make a
 major commitment of rewriting code.
 
+Then, years later, I found a way to achieve the same co-process
+capability without needing the IPC::ClearTool module. This is way
+simpler and easier to maintain, and proves the value of the
+ClearCase::Argv abstraction layer since the change was achieved without
+affecting users. At this point IPC::ClearTool is obsolete, though I
+have not yet removed it from CPAN since some people still use it.
+
 So, bottom line, C<ClearCase::Argv> now can be told to execute
 cleartool commands via the traditional C<process spawning> model OR via
-any of the specialty APIs out there (B<IPC::ClearTool>,
-B<ClearCase::CtCmd>, or CAL). Writing to its API sets you free from
-that decision until runtime.
+the specialty APIs (B<IPC> or B<ClearCase::CtCmd>).  Writing to the
+ClearCase::Argv API sets you free from that decision until runtime.

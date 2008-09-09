@@ -64,16 +64,15 @@ out of your script (and on your head).
 For any script which uses ClearCase::Argv, the 'ipc' class method
 <pre>
         ClearCase::Argv-&gt;ipc;</pre>
-<p>will start <strong>cleartool</strong> as an <strong>IPC::ClearTool</strong> co-process and arrange to
-send all subsequent system/exec/qx commands to it instead of forking a
-new child process each time. This can speed up scripts by anywhere
-between 1 (i.e. not at all) and 10 times by my measurements.</p>
-<p>However, the CtCmd interface (below) is generally preferred nowadays.</p>
+<p>will start <strong>cleartool</strong> as a co-process and arrange to send all
+subsequent system/exec/qx commands to it instead of forking a new child
+process each time. This can speed up scripts by anywhere between 1
+(i.e. not at all) and 10 times by my measurements.</p>
 <p></p>
 <li><strong><a name="item_ctcmd_interface_for_speed">CtCmd Interface for Speed</a></strong><br />
 </li>
-Just as with <strong>IPC::ClearTool</strong>, ClearCase::Argv can also be told to
-process commands via <strong>ClearCase::CtCmd</strong>
+As an alternative to IPC mode, ClearCase::Argv can also be told to
+process commands via <strong>ClearCase::CtCmd</strong>.
 <p></p>
 <li><strong><a name="item_convenience_features">Convenience Features</a></strong><br />
 </li>
@@ -218,11 +217,16 @@ came together with surprising ease. This is the big connection that
 makes it all pretty neat, IMHO, since you get improved speed,
 portability, and ease of use in one package. Without having to make a
 major commitment of rewriting code.</p>
+<p>Then, years later, I found a way to achieve the same co-process
+capability without needing the IPC::ClearTool module. This is way
+simpler and easier to maintain, and proves the value of the
+ClearCase::Argv abstraction layer since the change was achieved without
+affecting users. At this point IPC::ClearTool is obsolete, though I
+have not yet removed it from CPAN since some people still use it.</p>
 <p>So, bottom line, <code>ClearCase::Argv</code> now can be told to execute
 cleartool commands via the traditional <code>process spawning</code> model OR via
-any of the specialty APIs out there (<strong>IPC::ClearTool</strong>,
-<strong>ClearCase::CtCmd</strong>, or CAL). Writing to its API sets you free from
-that decision until runtime.</p>
+the specialty APIs (<strong>IPC</strong> or <strong>ClearCase::CtCmd</strong>).  Writing to the
+ClearCase::Argv API sets you free from that decision until runtime.</p>
 
 </body>
 

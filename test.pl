@@ -17,7 +17,7 @@ BEGIN {
 # Make sure output arrives synchronously.
 select(STDERR); $| = 1; select(STDOUT); $| = 1;
 
-use ClearCase::Argv qw(ctsystem ctqx);
+use ClearCase::Argv qw(ctsystem ctqx chdir);
 $final += printok(1);
 
 if (!`cleartool pwd -h`) {
@@ -177,12 +177,11 @@ my $reps = $ENV{CCARGV_TEST_REPS} || 50;
 print qq(
 ************************************************************************
 The following test doubles as a benchmark. It compares $reps
-invocations of "cleartool lsview -s" using a fork/exec (`cmd`) style
-vs $reps using the ClearCase::CtCmd (in-process) and IPC::ClearTool
-(co-process) models, if those modules are installed. If not, it will
-fall back to fork/exec.  If $reps is the wrong number for your
-environment, you can override it with the CCARGV_TEST_REPS environment
-variable.
+invocations of "cleartool lsview -s" using a fork/exec (`cmd`) style vs
+$reps using the ClearCase::CtCmd (in-process) --iff this module is
+installed-- and IPC (co-process) models. It will fall back to fork/exec.
+If $reps is the wrong number for your environment, you can
+override it with the CCARGV_TEST_REPS environment variable.
 ************************************************************************
 
 );
@@ -226,10 +225,10 @@ if (ClearCase::Argv->ctcmd(1)) {
 
 print qq(
 ************************************************************************
-With luck, if you have ClearCase::CtCmd or IPC::ChildSafe installed,
-you were able to see a substantial speedup using them. I usually see
-multiples ranging from 50% to 10:1, but this is dependent on a wide
-range of factors.
+If you have ClearCase::CtCmd, and anyway with ipc mode (whether you have
+IPC::ChildSafe installed or not--preferably not), you should see a
+substantial speedup using them. I usually see multiples ranging from 50%
+to 30:1, but this is dependent on a wide range of factors.
 ************************************************************************
 
 ************************************************************************
@@ -246,7 +245,9 @@ after receiving a maximum of 10 lines of output.
 );
 
 my $t4 = new Benchmark;
+ClearCase::Argv->ipc(0);
 my $thruPipe = ClearCase::Argv->new('find', ['-all', '-type', 'd', '-print']);
+$thruPipe->ipc(1);
 $thruPipe->readonly('yes');
 my $counter = 10;
 # Define the callback which will end the pipe early.
@@ -260,12 +261,204 @@ print qq(
 ************************************************************************
 NOTE: in a very small vob, the results above may be in favor of qx due to
 the fact that pipe introduces a constant overhead (particularly on Windows).
-
-Before ending we'll use the 'summary' class method to see what cmds were run:
 ************************************************************************
 
 );
 
+print qq(
+************************************************************************
+The following tests lean toward regression testing, although they can also
+show you useful usage patterns. First, check that a command resulting in
+an output NOT ending in newline, will be run correctly in ipc mode (it 
+already used to work in ctcmd mode, so this is a requirement mixing 
+orthogonality and backwards compatibility--there may be existing code which
+used to work in ctcmd mode, and need to work in the same way in ipc one)
+************************************************************************
+);
+
+ClearCase::Argv->ipc(1);
+my $describe = ClearCase::Argv->new('des', [qw(-fmt "%n" vob:.)]);
+$describe->autochomp(1);
+print qq(Current vob tag, no newline:\n);
+$describe->system;
+print qq(--extra newline not from the previous command\n);
+print qq(The same with qx, in scalar and array context\n);
+my $result = $describe->qx;
+$final += printok($result !~ m%\n%m);
+my @result = $describe->qx;
+$final += printok($result[0] !~ m%\n%m);
+
+print qq(
+************************************************************************
+Verify that, in ipc mode, the same co-process is shared by default between 
+the different objects, with the same view, and the same current directory.
+Check that deleting one object does not affect the others.
+Check that using chdir affects a shared ipc coprocess.
+Check also that when needed, such as e.g. when running through a pipe,
+one may create an object bound to a different process (with the same
+initial view and current directory, albeit independent).
+************************************************************************
+);
+
+ClearCase::Argv->ipc(1);
+ClearCase::Argv->autochomp(1);
+my $commonpid = ClearCase::Argv->{IPC}->{PID};
+my $obj1 = ClearCase::Argv->new(qw(pwv -s));
+my $pid1 = $obj1->{IPC}->{PID};
+$final += printok($pid1 == $commonpid);
+my $view1 = $obj1->qx;
+{
+    my $obj2 = $obj1->clone();
+    my $pid2 = $obj2->{IPC}->{PID};
+    $final += printok($pid2 == $pid1);
+    my $view2 = $obj2->qx;
+    $final += printok($view1 eq $view2);
+}
+$view1 = $obj1->qx;
+$final += printok($view1);
+{
+    use Cwd;
+    my $cwd = getcwd();
+    use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
+    my $tmp = MSWIN ? $ENV{TEMP} : '/tmp';
+    chdir($tmp);                     # overloaded chdir
+    $tmp = $obj1->argv(pwd)->qx;     # existing sharing the global coprocessor
+    my $obj2 = ClearCase::Argv->new;
+    my $tmp2 = $obj2->argv(pwd)->qx;
+    chomp $tmp2;
+    $final += printok($tmp2 eq $tmp);
+    chdir($cwd);
+}
+ClearCase::Argv->ipc(0);
+{
+    my $obj = ClearCase::Argv->new();
+    $obj->ipc(1);
+    my $pid3 = $obj->{IPC}->{PID};
+    $final += printok($pid3 != $pid1);
+}
+my $view2;
+{
+    my $pipeaview = ClearCase::Argv->new;
+    $pipeaview->readonly('yes');
+    $pipeaview->autofail(0);
+    #Find a view different from $view1
+    $pipeaview->pipecb(
+	sub {
+	    $view2 = shift;
+	    chomp $view2;
+	    return ($view2 eq $view1); # continue
+	});
+    $pipeaview->argv(qw(lsview -s))->pipe;
+}
+if ($view2 and ClearCase::Argv->ipc(1) and !MSWIN) {
+    my $obj3 = ClearCase::Argv->new;
+    $obj3->argv('setview', $view2)->system;
+    $view1 = $obj1->argv(qw(pwv -s))->qx;
+    $view2 = $obj3->argv(qw(pwv -s))->qx;
+    print "Current views in two ipc objects: 1: $view1; 2: $view2\n";
+    $final += printok($view1 and $view2 and ($view1 ne $view2));
+}
+
+print qq(
+************************************************************************
+String versus list format for the commands, in the various cases.
+E.g. fork mode (i.e. passing to Argv.pm after inserting 'cleartool' into
+AV_PROG): a string command is internally turned into a list.
+This might affect quoting... More such tests probably needed.
+************************************************************************
+);
+{
+    ClearCase::Argv->ipc(0);
+    ClearCase::Argv->ctcmd(0);
+    my $c = ClearCase::Argv->new();
+    print "Print the current view\n";
+    my $rc = $c->argv("pwv -s")->system;
+    my $view = $c->argv("pwv -s")->qx;
+    $final += printok(!$rc and $view);
+}
+
+print qq(
+************************************************************************
+Quoting: exploring the options in a command with a multiline format.
+************************************************************************
+);
+sub quotetest {
+    my ($desc, $aq, $l, $q, $s, $x) = @_;
+    my ($tc, $ret);
+    my @okret = qw(a b);
+    my $c = ClearCase::Argv->new;
+    print "$desc: ";
+    print $l ? "list, " : "single quoted string, ";
+    print "non" unless $q;
+    print " quoted format; autoquote: $aq\n";
+    if ($l and $q) {
+	$c->argv(qw(des -fmt "a\nb\n" .));
+    } elsif ($l and !$q) {
+	$c->argv(qw(des -fmt a\nb\n .));
+    } elsif (!$l and $q) {
+	$c->argv('des -fmt "a\nb\n" .');
+    } elsif (!$l and !$q) {
+	$c->argv('des -fmt a\nb\n .');
+    } else {
+	print "Non supported case\n";
+    }
+    $rc = $c->stdout(0)->system if $s;
+    if ($x) {
+	@ret = $c->qx;
+	chomp @ret;
+    }
+    $final += printok((!$s or !$rc) and (!$x or (@ret eq @okret)));
+}
+ClearCase::Argv->ipc(0);
+ClearCase::Argv->ctcmd(0);
+quotetest('Fork model', 1, 1, 1, 0, 0);
+quotetest('Fork model', 1, 1, 0, 1, 0);
+quotetest('Fork model', 1, 0, 1, 0, 0);
+quotetest('Fork model', 1, 0, 0, 0, 0);
+ClearCase::Argv->ipc(1);
+quotetest('IPC model', 1, 1, 1, 1, 1);
+quotetest('IPC model', 1, 1, 0, 1, 1);
+quotetest('IPC model', 1, 0, 1, 1, 1);
+quotetest('IPC model', 1, 0, 0, 1, 1);
+quotetest('IPC model', 0, 1, 1, 1, 1);
+quotetest('IPC model', 0, 1, 0, 1, 1);
+quotetest('IPC model', 0, 0, 1, 1, 1);
+quotetest('IPC model', 0, 0, 0, 1, 1);
+
+print qq(
+************************************************************************
+Quoting: exploring the options in a command with a whitespace in format.
+************************************************************************
+);
+{
+    ClearCase::Argv->ipc(1);
+    my $r = ClearCase::Argv->new('des',['-fmt','a b'],'.')->qx;
+    $final += printok($r eq 'a b');
+}
+
+print qq(
+************************************************************************
+Skipping error reporting, especially in ipc mode
+The system command is there to check that the label type is really
+not defined...
+************************************************************************
+);
+{
+  ClearCase::Argv->ipc(1);
+  my $ct = ClearCase::Argv->new;
+  print "Expected: one single report about NON_EXISTING_TYPE\n";
+  $ct->argv(qw(des -s lbtype:NON_EXISTING_TYPE))->system;
+  my $r1 = $ct->argv(qw(des -s lbtype:NON_EXISTING_TYPE))->stderr(0)->qx;
+  $ct->ctcmd(1); #works or not...
+  my $r2 = $ct->argv(qw(des -s lbtype:NON_EXISTING_TYPE))->stderr(0)->qx;
+  $final += printok(!$r1 and !$r2);
+}
+
+print qq(
+************************************************************************
+Before ending we'll use the 'summary' class method to see what cmds were run:
+************************************************************************
+);
 print STDERR ClearCase::Argv->summary;	# print out the stats we kept
 $final += printok(1);
 

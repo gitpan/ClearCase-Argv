@@ -1,13 +1,15 @@
 package ClearCase::Argv;
 
-$VERSION = '1.26';
+$VERSION = '1.40';
 
-use Argv 1.22;
+use Argv 1.23;
+use Text::ParseWords;
 
 use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
+my $NUL = MSWIN ? 'NUL' : '/dev/null';
 
 @ISA = qw(Argv);
-%EXPORT_TAGS = ( 'functional' => [ qw(ctsystem ctexec ctqx ctqv ctpipe) ] );
+%EXPORT_TAGS = ( 'functional' => [ qw(ctsystem ctexec ctqx ctqv ctpipe chdir) ] );
 @EXPORT_OK = (@{$EXPORT_TAGS{functional}});
 
 *AUTOLOAD = \&Argv::AUTOLOAD;
@@ -15,7 +17,10 @@ use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 use strict;
 
 my $class = __PACKAGE__;
-
+my %pidcount;
+END {
+  ClearCase::Argv->ipc(0); #Kill any remaining coprocess
+}
 # For programming purposes we can't allow per-user preferences.
 if ($ENV{CLEARCASE_PROFILE}) {
     $ENV{_CLEARCASE_PROFILE} = $ENV{CLEARCASE_PROFILE};
@@ -29,14 +34,15 @@ for (grep !/^_/, keys %Argv::Argv) {
     $Argv::Argv{$_} = $ENV{$ev} if defined $ENV{$ev};
 }
 
-my $ct = 'cleartool';
+my @ct = ('cleartool');
 
 # Attempt to find the definitive ClearCase bin path at startup. Don't
 # try excruciatingly hard, it would take unwarranted time. And don't
 # do so at all if running setuid or as root. If this doesn't work,
-# the path can be set explicitly via the 'find_cleartool' class method.
+# the path can be set explicitly via the 'cleartool_path' class method.
 if (!MSWIN && ($< == 0 || $< != $>)) {
-    $ct = '/usr/atria/bin/cleartool';	# running setuid or as root
+    # running setuid or as root
+    @ct = ('/opt/rational/clearcase/bin/cleartool');
 } elsif ($ENV{PATH} !~ m%\W(atria|ClearCase)\Wbin\b%i) {
     if (!MSWIN) {
 	my $abin = $ENV{ATRIAHOME} ? "$ENV{ATRIAHOME}/bin" : '/usr/atria/bin';
@@ -57,7 +63,12 @@ if (!MSWIN && ($< == 0 || $< != $>)) {
 }
 
 # Class method to get/set the location of 'cleartool'.
-sub find_cleartool { (undef, $ct) = @_ if $_[1]; $ct }
+sub cleartool_path {
+    shift;
+    @ct = @_ if @_;
+    return wantarray ? @ct : $ct[0];
+}
+*find_cleartool = \&cleartool_path;  # backward compatibility 
 
 # Override of base-class method to change a prog value of 'foo' into
 # qw(cleartool foo). If the value is already an array or array ref
@@ -70,7 +81,7 @@ sub prog {
     if (@_ || ref($prg) || $prg =~ m%^/|^\S*cleartool% || $self->ctcmd) {
 	return $self->SUPER::prog($prg, @_);
     } else {
-	return $self->SUPER::prog([$ct, $prg], @_);
+	return $self->SUPER::prog([@ct, parse_line('\s+', 1, $prg)], @_);
     }
 }
 
@@ -98,6 +109,7 @@ sub system {
 
     my $envp = $self->envp;
     my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
+    $self->stderr(0) unless $efd; #workaround for destructive reading
     $self->args($self->glob) if $self->autoglob;
     my @prog = @{$self->{AV_PROG}};
     shift(@prog) if $prog[0] =~ m%cleartool%;
@@ -122,7 +134,10 @@ sub system {
 	open(STDOUT, $ofd) || warn "$ofd: $!";
     } else {
 	warn "Warning: illegal value '$ofd' for stdout" if $ofd > 2;
-	$outplace = -1 if $ofd == 0;
+        if ($ofd == 0) {
+	    $outplace = -1;
+	    open(STDOUT, ">$NUL") if $self->ipc();
+	}
     }
     $self->_dbg($dbg, '+>', \*STDERR, @cmd) if $dbg && $self->ctcmd;
     if ($efd == 1) {
@@ -166,6 +181,7 @@ sub qx {
 
     my $envp = $self->envp;
     my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
+    $self->stderr(0) unless $efd; #workaround for destructive reading
     $self->args($self->glob) if $self->autoglob;
     my @prog = @{$self->{AV_PROG}};
     shift(@prog) if $prog[0] =~ m%cleartool%;
@@ -234,7 +250,7 @@ sub qx {
 	    $? = $rc;
 	    return @data;
 	} else {
-	    my $data = "@data";
+	    my $data = join '', @data;
 	    chomp($data) if $self->autochomp;
 	    $self->unixpath($data) if MSWIN && $self->outpathnorm;
 	    if ($rc) {
@@ -252,25 +268,17 @@ sub pipe {
     return $class->new(@_)->pipe if !ref($_[0]) || ref($_[0]) eq 'HASH';
 
     my $self = shift;
-
+    my $mode;
     if ($self->ctcmd) {
-	my $otherSelf = $self->clone();
-	$self->warning("CtCmd usage incompatible with pipe - temporarily reverting to plain cleartool") if $self->dbglevel;
-	$otherSelf->prog($ct, $self->prog);
-	return $otherSelf->SUPER::pipe(@_);
+	$mode = 'CtCmd';
     } elsif ($self->ipc) {
-	my $cb = $self->pipecb;
-	$self->error("No callback supplied") unless ref($cb) eq 'CODE';
-	$self->args($self->glob) if $self->autoglob;
-	my @prog = @{$self->{AV_PROG}};
-	shift(@prog) if $prog[0] =~ m%cleartool%;
-	my @opts = $self->_sets2opts(@_);
-	my @args = @{$self->{AV_ARGS}};
-	my @cmd = (@prog, @opts, @args);
-	$self->_addstats("cleartool @prog", scalar @args)
-	    if defined %Argv::Summary;
-	my $rc = $self->_ipc_cmd($cb, @cmd);
-	return $rc;
+        $mode = 'IPC';
+    }
+    if ($mode) {
+	my $otherSelf = $self->clone();
+	$self->warning("$mode usage incompatible with pipe - temporarily reverting to plain cleartool") if $self->dbglevel;
+	($mode eq 'CtCmd') ? $otherSelf->ctcmd(0) : $otherSelf->ipc(0);
+	return $otherSelf->SUPER::pipe(@_);
     } else {
 	return $self->SUPER::pipe(@_);
     }
@@ -296,39 +304,43 @@ sub ctcmd {
     my $self = shift;	# this might be an instance or a classname
     my $level = shift;
     $level = 2 if !defined($level) && !defined(wantarray);
-    if (defined $level) {
+    if ($level) {
 	eval { require ClearCase::CtCmd };
-    }
-    if ($@ && defined($level)) {
-	my $msg = $@;
-	if ($level == 2 && $msg =~ m%^(Can't locate \S+)%) {
-	    $msg = $1;
-	} elsif ($level > 2) {
-	    die("Error: $msg");
-	}
-	if ($level == 1 || $level == 2) {
-	    # On Windows, if the real ClearCase::CtCmd is missing hack
-	    # in our own version that uses CAL directly.
-	    if (MSWIN) {
-		eval { require Win32::OLE };
-		if ($@) {
-		    warn("Warning: $msg\n") if $level == 2;
-		    return undef;
+	if ($@) {
+	    my $msg = $@;
+	    if ($level == 2 && $msg =~ m%^(Can't locate \S+)%) {
+		$msg = $1;
+	    } elsif ($level > 2) {
+		die("Error: $msg");
+	    }
+	    if ($level == 1 || $level == 2) {
+		# On Windows, if the real ClearCase::CtCmd is missing hack
+		# in our own version that uses CAL directly.
+		if (MSWIN) {
+		    eval { require Win32::OLE };
+		    if ($@) {
+			warn("Warning: $msg\n") if $level == 2;
+			return undef;
+		    } else {
+			warn("Warning: $msg, using CAL instead\n")
+			    if $level == 2;
+			*ClearCase::CtCmd::new = \&_ctcmd_new;
+			*ClearCase::CtCmd::status = \&_ctcmd_status;
+			*ClearCase::CtCmd::exec = \&_ctcmd_cmd2cal;
+			*ClearCase::CtCmd::cleartool = \&_ctcmd_cmd2cal;
+			$ClearCase::CtCmd::VERSION = '1.01';
+			Win32::OLE->Option(Warn => 0);
+		    }
 		} else {
-		    warn("Warning: $msg, using CAL instead\n") if $level == 2;
-		    *ClearCase::CtCmd::new = \&_ctcmd_new;
-		    *ClearCase::CtCmd::status = \&_ctcmd_status;
-		    *ClearCase::CtCmd::exec = \&_ctcmd_cmd2cal;
-		    *ClearCase::CtCmd::cleartool = \&_ctcmd_cmd2cal;
-		    $ClearCase::CtCmd::VERSION = '1.01';
-		    Win32::OLE->Option(Warn => 0);
+		    warn("Warning: $msg, using fork/exec instead\n")
+			if $level == 2;
+		    return undef;
 		}
 	    } else {
-		warn("Warning: $msg, using fork/exec instead\n") if $level == 2;
-		return undef;
+	      no strict 'refs';
+	      $self->{CCAV_CTCMD} = 0;
+	      return undef;
 	    }
-	} else {
-	    return undef;
 	}
     }
     no strict 'refs';		# because $self may be a symbolic hash ref
@@ -345,7 +357,7 @@ sub ctcmd {
 	    ## $ENV{CLEARCASE_ARGV_CTCMD} = $self->{CCAV_CTCMD} if !ref($self);
 	    return $self;
 	} else {					# close up shop
-	    delete $self->{CCAV_CTCMD} if $self->{CCAV_CTCMD};
+	    delete $self->{CCAV_CTCMD} if exists $self->{CCAV_CTCMD};
 	    delete $ENV{CLEARCASE_ARGV_CTCMD}
 				if $ENV{CLEARCASE_ARGV_CTCMD} && !ref($self);
 	    return $self;
@@ -376,11 +388,11 @@ sub _ctcmd_cmd2cal {
     my $self = ref($_[0]) ? shift : undef;
     # It may make more sense to stash a copy of this object rather than
     # recreate it each time.
-    my $ct = Win32::OLE->new('ClearCase.ClearTool');
+    my $ccct = Win32::OLE->new('ClearCase.ClearTool');
     # Turn list cmds into a quoted string.
     my $cmd = (@_ == 1) ? $_[0] : join(' ', map {"'$_'"} @_);
     # Send the actual command to CAL and get stdout returned.
-    my $out = $ct->CmdExec($cmd);
+    my $out = $ccct->CmdExec($cmd);
     # Must reap the return code first, then get stderr IFF retcode != 0.
     my $rc = int Win32::OLE->LastError;
     my $err = $rc ? Win32::OLE->LastError . "\n" : '';
@@ -397,10 +409,14 @@ sub _ctcmd_cmd2cal {
     }
     $self->{'status'} = $rc if $self;
     my @results = $rc;
-    if ($self && exists($self->{outfunc}) && ($self->{outfunc} == 0)) {
-	print STDOUT $out;
+    if (defined($out)) {
+        if ($self && exists($self->{outfunc}) && ($self->{outfunc} == 0)) {
+	    print STDOUT $out;
+        } else {
+	    push(@results, $out);
+        }
     } else {
-	push(@results, $out);
+        push(@results, q()); #Make sure $err will go into the 3rd slot
     }
     if ($self && exists($self->{errfunc}) && ($self->{errfunc} == 0)) {
 	print STDERR $err;
@@ -422,32 +438,38 @@ sub ipc {
     no strict 'refs';	# because $self may be a symbolic hash ref
     my $level = shift;
     if (defined($level) && !$level) {
-	# Send an explicit "exit" command and close up shop.
 	return 0 unless exists($self->{IPC});
 	my $down = $self->{IPC}->{DOWN};
+	my $pid = $self->{IPC}->{PID};
+	delete $self->{IPC};
+	return 0 if --$pidcount{$pid};
+	# Send an explicit "exit" command and close up shop.
 	print $down "exit\n";
 	my $rc = close($down);
-	waitpid($self->{IPC}->{PID}, 0);
-	delete $self->{IPC};
+	waitpid($pid, 0);
 	return $rc || $?;
-    } elsif (!defined($level) && defined(wantarray)) {
+    } elsif (!defined($level)) {
 	return exists($self->{IPC}) ? $self : 0;
     }
 
     if ($self->ctcmd) {
 	$self->ctcmd(0);	# shut down the CtCmd connection
     }
-
+    if (exists($class->{IPC})) {
+        if (($self ne $class) and !$self->ipc) {
+	    ++$pidcount{$class->{IPC}->{PID}};
+	    $self->{IPC}->{PID}  = $class->{IPC}->{PID};
+	    $self->{IPC}->{DOWN} = $class->{IPC}->{DOWN};
+	    $self->{IPC}->{BACK} = $class->{IPC}->{BACK};
+	}
+	return $self;
+    }
     # This should never fail to load since it's built in.
     require IPC::Open3;
 
-    my $ct = MSWIN ?
-	'cleartool' :
-	join('/', $ENV{ATRIAHOME}||'/opt/rational/clearcase', 'bin/cleartool');
-
     # Dies on failure.
     my($down, $back);
-    my $pid = IPC::Open3::open3($down, $back, undef, 'cleartool', '-status');
+    my $pid = IPC::Open3::open3($down, $back, undef, @ct);
 
     # Set the "line discipline" to convert CRLF to \n.
     binmode $back, ':crlf';
@@ -455,6 +477,7 @@ sub ipc {
     $self->{IPC}->{DOWN} = $down;
     $self->{IPC}->{BACK} = $back;
     $self->{IPC}->{PID} = $pid;
+    ++$pidcount{$pid};
 
     return $self;
 }
@@ -468,7 +491,8 @@ sub _ipc_cmd {
     $self->_dbg($dbg, '=>', \*STDERR, @_) if $dbg;
 
     # Send the command to cleartool.
-    my $cmd = "@_";
+    my $cmd =
+      join(' ', map {/\s/ && !(/^'.+'$/ || /^".+"$/) ? qq("$_") : $_} @_);
     chomp $cmd;
     my $down = $self->{IPC}->{DOWN};
     print $down $cmd, "\n";
@@ -479,34 +503,47 @@ sub _ipc_cmd {
 	print $down $input, "\n.\n";
 	delete $self->{IPC}->{COMMENT};
     }
+    # Hack to simulate 'cleartool -status', until ClearCase bug fix
+    print $down "des -fmt \"Command 0 returned status 0\\n\" .\n";
 
     # Read back the results and get command status.
     my $rc = 0;
     my $back = $self->{IPC}->{BACK};
     while($_ = <$back>) {
-	if (m%^Command \d+ returned status (\d+)%) {
+        my ($last, $next);
+	my $out = *STDOUT;
+	if (m%^cleartool: (Error|Warning):%) {      #Simulate -status
+	    $rc += 1 << 8 if $1 eq 'Error';
+	    if ($self->stderr) {
+	        $out = *STDERR;
+	    } else {
+	        $self->stderr(0); # Restore after destructive read
+	        $next = 1;
+	    }
+	}
+	if (s%^(.*)Command \d+ returned status (\d+)%$1%) {
 	    # Shift the status up so it looks like an exit status.
-	    $rc = $1 << 8;
-	    last;
+	    # $rc = $2 << 8;                        #-status disabled
+	    chomp;
+	    $_ ? $last = 1 : last;
 	}
 	print '+ <=', $_ if $_ && $dbg >= 2;
-	chomp if $self->autochomp;
+	next if $next;
 	if ($disposition) {
-	    if (ref($disposition) eq 'CODE') {
-		my $keepGoing = &$disposition($_);
-		next if $keepGoing;
-		if ($self->_read_only) {
-		    kill HUP => $self->{IPC}->{PID};
-		    $rc = $self->ipc(0);
-		    last;
-		}
-		$self->warning("Not abortable unless readonly - continuing!");  
-	    } else {
-		push(@$disposition, $_);
-	    }
+	    push(@$disposition, $_);
 	} else {
-	    print;
+	    print $out $_;
 	}
+	if (/^Comments for /) {
+	    while (<>) {
+	        chomp;
+		print $down "$_\n";
+	        last if /^\.$/;
+	    }
+	    print $down ".\n" unless defined($_);
+	    print $down "des -fmt \"Command 0 returned status 0\\n\" .\n";
+	}
+	last if $last;
     }
 
     return $rc;
@@ -608,12 +645,42 @@ sub attropts {
     return $self->SUPER::attropts(@_, qw(ipc ctcmd));
 }
 
+sub _chdir {
+    my $self = shift; # this might be an instance or a classname
+    my ($dir) = @_;
+    chomp $dir;
+    my $rc = CORE::chdir($dir);
+    if ($self->ipc) {
+        my $ctcd = ref($self) ? $self->clone : __PACKAGE__->new;
+        $ctcd->stdout(0)->argv('cd', $dir)->system;
+    }
+    return $rc;
+}
+
 # Export our own functional interfaces as well.
 sub ctsystem	{ return __PACKAGE__->new(@_)->system }
 sub ctexec	{ return __PACKAGE__->new(@_)->exec }
 sub ctqx	{ return __PACKAGE__->new(@_)->qx }
 sub ctpipe	{ return __PACKAGE__->new(@_)->pipe }
+sub chdir	{ return __PACKAGE__->_chdir(@_) }
 *ctqv = \&ctqx;  # just for consistency
+
+# Constructor, and copy constructor as clone, with $proto
+sub new {
+    my $proto = shift;
+    my $self = $proto->SUPER::new(@_);
+    if ($self->ipc) {
+	++$pidcount{$self->{IPC}->{PID}};
+	if (ref($proto)) {
+	    # Correct the effect of the base cloning on globs
+	    $self->{IPC}->{DOWN} = $proto->{IPC}->{DOWN};
+	    $self->{IPC}->{BACK} = $proto->{IPC}->{BACK};
+	}
+    }
+    bless $self, ref($proto) ? ref($proto) : $proto;
+    return $self;
+}
+*clone = \&new;
 
 # Clean up leftover cleartool processes if user forgot to.
 sub DESTROY {
@@ -643,7 +710,8 @@ ClearCase::Argv - ClearCase-specific subclass of Argv
     # Run it without the flags.
     $describe->system('-');
     # Run it through a pipe.
-    $describe->pipe(sub { print shift; return 1; });
+    $describe->pipecb(sub { print shift; return 1; });
+    $describe->pipe;
     # Create label type XX iff it doesn't exist
     ClearCase::Argv->new(qw(mklbtype -nc XX))
 	    if ClearCase::Argv->new(qw(lstype lbtype:XX))->stderr(0)->qx;
@@ -805,7 +873,7 @@ I<CtCmd mode> is on or off. When called with a numerical argument, it
 sets the CtCmd mode as follows: if the argument is 0, CtCmd mode is
 turned off and subsequent commands are sent to real cleartool via the
 standard execution interface.  With an argument of 1, it attempts to
-use CtCmd mode. If CtCmd fails to load for any reason it will
+use CtCmd mode but if CtCmd fails to load for any reason it will
 (silently) run commands via CAL instead.  With an argument of 2 the
 behavior is the same but a warning ("CtCmd not found - using CAL
 instead") is printed.  With an argument of 3 the warning becomes a
@@ -912,6 +980,40 @@ I suspect there are still some special quoting situations unaccounted
 for in the I<quote> method. This will need to be refined over time. Bug
 reports or patches gratefully accepted.
 
+Commands using a format option defining a multiline output fail in many
+cases in fork mode, because of the underlying Argv module.
+
+ClearCase::Argv will use IPC::ChildSafe if it finds it, which may 
+introduce differences of behavior with the newer code to replace it.
+It should probably just drop it, unless explicitly driven to use it.
+
+Autochomp should be equivalent in all modes on all platforms, which
+is hard to test (ipc w/wo IPC::ChildSafe, ctcmd, on Unix and Windows,
+with system and qx...).
+The autochomp setting should not affect system calls in ipc mode!?
+Hopefully it doesn't anymore. Problem: change not satisfactorily tested
+on Windows yet (where the output prior to the last change seemed ok...)
+
+Argv uses the first of three different methods for cloning, and I
+(Marc Girod) suspect that only the first one (Clone, in recent versions)
+performs correctly with GLOB objects... Work-around in place.
+
+The string 'cleartool' is hard-coded in many places, making it hard to
+implement additional support for multitool commands.
+
+The use of 'cleartool -status' needed to be disabled, and simulated,
+because of a ClearCase bug, with setview exiting the interactive session
+to the shell (Found from 2002.05.00 to 7.0.1).
+The result in an ipc mode using '-status' was: hang.
+
+Cygwin is not supported on Windows.
+
+The 'exit' cleartool command is dangerous in ipc mode: it will stop the
+coprocess unconditionally, without Argv updating its ipc status, and the
+ipccount. This will affect any other users of the same coprocess.
+An other symptom of the problem is a 'broken pipe' error. Argv writes
+to the coprocess, but obviously fails to read anything coming back.
+
 =head1 PORTABILITY
 
 ClearCase::Argv should work on all supported ClearCase platforms and
@@ -919,10 +1021,17 @@ versions. It's currently maintained on Solaris 9 and Windows XP with CC
 7.0 using Perl5.8.x.  Viability on other platforms and/or earlier
 versions is untestable by me.
 
+Marc Girod's testing environment: Solaris 8 and 10, and Windows 2000, 
+without CtCmd and IPC::ChildSafe, with Clone.
+Tatyana Shpichko's testing environment: RedHat Linux 4, with and without
+CtCmd, and Windows XP without CtCmd.
+
 =head1 FILES
 
 This is a subclass of I<Argv> and thus requires I<Argv> to be
-installed.  ClearCase::CtCmd is required for I<ctcmd mode>.
+installed.  ClearCase::CtCmd is required for I<ctcmd mode> in Unix.
+In Windows, I<Win32-Process-Info> or I<Win32::ToolHelp> is required
+for I<pipe> support.
 
 =head1 SEE ALSO
 

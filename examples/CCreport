@@ -153,7 +153,7 @@ if ($opt{user}) {
    $Pred =~ s/\s+\|\|\s$/)/;
 }
 
-# Must go into "ipc" mode in order to retain setview/cd/etc state.
+# Must go into "ipc" or "ctcmd" mode in order to retain setview/cd/etc state.
 $ct->ipc(3);
 
 # First we need a view to work through.
@@ -166,9 +166,6 @@ my @PublicVobs = map {(m%^..(\S+)%)[0]} grep /\bpublic\b/, $ct->lsvob->qx;
 
 # Makes tail -f of output file easier when testing.
 $| = 1;
-
-# "Paragraph mode" - causes chomp to remove multiple trailing \n
-$/ = '';
 
 # If no branches specified, report on all.
 my @branches = $opt{branches} ? map {split /,/} join(',', @{$opt{branches}}) :
@@ -235,9 +232,11 @@ for my $dir (@ARGV) {
 	$version =~ m+/private/|/trigtest/+ && next;
 
 	# Get the raw data about this version and clean it up a bit.
-	my($line) = $ct->argv("desc -fmt \"%d===%u===%Fu===%a===%l===%En@@%Sn\\n\" '$version'")->qx;
+	my($line) = $ct->desc([qw(-fmt %d===%u===%Fu===%a===%l===%En@@%Sn)],
+			                                      $version)->qx;
 	next if $?;
-	my($date, $username, $fullname, $attrs, $labels, $xpn) = split /===/, $line;
+	my($date, $username, $fullname, $attrs, $labels, $xpn) =
+	                                                 split /===/, $line;
 
 	# Separate the version-extended pathname into path and version.
 	my($pn, $vers) = ($xpn =~ m%(.*)@@(.*)%);
@@ -263,8 +262,11 @@ for my $dir (@ARGV) {
 	#$cpn =~ s%(@@)?/main/.*?(CHECKEDOUT\.)?\d+/%/%g;
 
 	# Get the comment and format it correctly.
-	my $cmt = $ct->argv("desc -fmt \"%c\\n\" '$version'")->qx;
+	my $cmt = $ct->desc([qw(-fmt %c)], $version)->qx;
 	next if $?;
+
+	# "Paragraph mode" - causes chomp to remove multiple trailing \n
+	{ local $/ = ''; chomp $cmt; }
 
 	# If the comment contains a line ending with ~p we
 	# consider it to be intentionally private.

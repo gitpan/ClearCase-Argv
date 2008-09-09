@@ -207,3 +207,76 @@ Revision history for Perl extension ClearCase::Argv.
 	  Bugs remain, particularly in the area of quoting for
 	  IPC mode on Windows, but this version is released
 	  because it is far better on Windows than the previous.
+
+1.27 Wed Sep 19 09:54:43 EDT 2007
+	- Fixed more Windows bugs reported by James Anderson.
+	  - The $self->ctcmd method continued to return true even
+	    after ctcmd mode was turned off.
+	  - Quoting of arguments containing whitespace was improved
+	    in IPC mode.
+
+1.27a Tue Apr  1 17:14:30 BST 2008
+	- Reference count on co-process pid, and sharing
+	- Fixed the DOWN and BACK globs after cloning
+
+1.28 Sun Apr 13 21:23:07 BST 2008
+	- Invoking cleartool from the path computed previously
+	- Support in ipc a cleartool output not ending in a newline
+	- The autochomp mode shouldn't affect calls via system method
+	- Piping requires a dedicatd co-process and special cleanup
+
+1.29 Mon Apr 14 21:21:14 BST 2008
+	- Fix to pid reference counting
+	- Overloaded CORE::chdir
+
+1.30 Wed Apr 16 09:13:42 BST 2008
+	- More fixes to reference counting. Avoid creating an IPC
+	  substructure by side-effect.
+	- chdir also works as member in ipc object with distinct process
+
+1.31 Thu Apr 17 20:05:08 BST 2008
+	- pipe: reverting temporarily to fork model from ipc as well
+	- added 2 tests with independent cleartool processes
+
+1.32 Sun Apr 27 20:41:14 BST 2008
+	- Reverted to plain cleartool, simulating -status, to work around bug
+	- Added a setview test in ipc mode to verify the result
+	- Removed dead code in _ipc_cmd, once pipe uses fork
+	- When inserting $ct in prog, to use the fork mode, parse cmd into list
+	- Added quoting tests; commented those failing for imported reasons
+	- Fixed stdout(0) in ipc mode.
+
+1.33 Mon Apr 28 12:27:24 BST 2008
+	- ctcmd(0) sets CCAV_CTCMD to 0 in Windows, under CAL
+	- Skipped setview test on Windows
+	- Windows: all paths in test through outpathnorm for comparison
+
+1.34 Tue May  6 11:53:54 GMTDT 2008
+	- Avoid printing empty stdout in error case with CAL on Windows.
+
+1.35 Sun Jun  8 15:08:17 BST 2008
+	- Merged in 1.27
+	- Support for stderr(0) in ipc mode
+
+1.36 Tue Jun 17 09:15:31 BST 2008
+	- END clause to kill remaining cleartool coprocesses, esp in Windows
+	- sdterr(0) fix for CAL mode
+	- Redirection to STDERR in ipc mode
+	- Fix (James Anderson) to reference counting if already in ipc mode
+	- Fixes to example/setview
+
+1.37 Fri Sep  5 10:36:23 BST 2008
+	- Fix to multiline return in scalar context, in ipc mode
+	- Uncommented fork model quoting tests after fix in Argv.pm 1.23
+	- Flaky/dubious support for interactive comments in unix in ipc mode
+
+1.38 Fri Sep  5 23:26:44 EDT 2008
+	- Represent 'cleartool' as a list instead of a scalar.
+	  The idea is to allow 'cleartool' to be replaced by something
+	  like qw(sudo cleartool). See ./examples/ctsudo.
+
+1.39 Sat Sep  6 10:47:09 EDT 2008
+	- Renamed 'find_cleartool' to more intuitive 'cleartool_path'.
+
+1.40 Mon Sep  8 12:46:08 EDT 2008
+	- Fixed merge skew in setview and CCreport example scripts.

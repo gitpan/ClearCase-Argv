@@ -7,6 +7,7 @@ Makefile.PL
 examples/README
 examples/CCreport
 examples/bmccug
+examples/ctsudo
 examples/fix_eltype
 examples/envp
 examples/functional
