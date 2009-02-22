@@ -290,7 +290,7 @@ $final += printok($result[0] !~ m%\n%m);
 
 print qq(
 ************************************************************************
-Verify that, in ipc mode, the same co-process is shared by default between 
+Verify that, in ipc mode, the same co-process is shared by default between
 the different objects, with the same view, and the same current directory.
 Check that deleting one object does not affect the others.
 Check that using chdir affects a shared ipc coprocess.
@@ -316,10 +316,10 @@ my $view1 = $obj1->qx;
 }
 $view1 = $obj1->qx;
 $final += printok($view1);
+use Cwd;
+use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 {
-    use Cwd;
     my $cwd = getcwd();
-    use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
     my $tmp = MSWIN ? $ENV{TEMP} : '/tmp';
     chdir($tmp);                     # overloaded chdir
     $tmp = $obj1->argv(pwd)->qx;     # existing sharing the global coprocessor
@@ -335,28 +335,6 @@ ClearCase::Argv->ipc(0);
     $obj->ipc(1);
     my $pid3 = $obj->{IPC}->{PID};
     $final += printok($pid3 != $pid1);
-}
-my $view2;
-{
-    my $pipeaview = ClearCase::Argv->new;
-    $pipeaview->readonly('yes');
-    $pipeaview->autofail(0);
-    #Find a view different from $view1
-    $pipeaview->pipecb(
-	sub {
-	    $view2 = shift;
-	    chomp $view2;
-	    return ($view2 eq $view1); # continue
-	});
-    $pipeaview->argv(qw(lsview -s))->pipe;
-}
-if ($view2 and ClearCase::Argv->ipc(1) and !MSWIN) {
-    my $obj3 = ClearCase::Argv->new;
-    $obj3->argv('setview', $view2)->system;
-    $view1 = $obj1->argv(qw(pwv -s))->qx;
-    $view2 = $obj3->argv(qw(pwv -s))->qx;
-    print "Current views in two ipc objects: 1: $view1; 2: $view2\n";
-    $final += printok($view1 and $view2 and ($view1 ne $view2));
 }
 
 print qq(
@@ -383,25 +361,12 @@ Quoting: exploring the options in a command with a multiline format.
 ************************************************************************
 );
 sub quotetest {
-    my ($desc, $aq, $l, $q, $s, $x) = @_;
+    my ($desc, $aq, $s, $x) = @_;
     my ($tc, $ret);
     my @okret = qw(a b);
     my $c = ClearCase::Argv->new;
-    print "$desc: ";
-    print $l ? "list, " : "single quoted string, ";
-    print "non" unless $q;
-    print " quoted format; autoquote: $aq\n";
-    if ($l and $q) {
-	$c->argv(qw(des -fmt "a\nb\n" .));
-    } elsif ($l and !$q) {
-	$c->argv(qw(des -fmt a\nb\n .));
-    } elsif (!$l and $q) {
-	$c->argv('des -fmt "a\nb\n" .');
-    } elsif (!$l and !$q) {
-	$c->argv('des -fmt a\nb\n .');
-    } else {
-	print "Non supported case\n";
-    }
+    print "$desc: autoquote: $aq\n";
+    $c->argv(qw(des -fmt), 'a\nb\n', '.');
     $rc = $c->stdout(0)->system if $s;
     if ($x) {
 	@ret = $c->qx;
@@ -411,19 +376,12 @@ sub quotetest {
 }
 ClearCase::Argv->ipc(0);
 ClearCase::Argv->ctcmd(0);
-quotetest('Fork model', 1, 1, 1, 0, 0);
-quotetest('Fork model', 1, 1, 0, 1, 0);
-quotetest('Fork model', 1, 0, 1, 0, 0);
-quotetest('Fork model', 1, 0, 0, 0, 0);
+quotetest('Fork model', 1, 0, 0);
+quotetest('Fork model', 1, 1, 0);
+quotetest('Fork model', 1, 0, 0);
 ClearCase::Argv->ipc(1);
-quotetest('IPC model', 1, 1, 1, 1, 1);
-quotetest('IPC model', 1, 1, 0, 1, 1);
-quotetest('IPC model', 1, 0, 1, 1, 1);
-quotetest('IPC model', 1, 0, 0, 1, 1);
-quotetest('IPC model', 0, 1, 1, 1, 1);
-quotetest('IPC model', 0, 1, 0, 1, 1);
-quotetest('IPC model', 0, 0, 1, 1, 1);
-quotetest('IPC model', 0, 0, 0, 1, 1);
+quotetest('IPC model', 1, 1, 1);
+quotetest('IPC model', 0, 1, 1);
 
 print qq(
 ************************************************************************
@@ -434,24 +392,6 @@ Quoting: exploring the options in a command with a whitespace in format.
     ClearCase::Argv->ipc(1);
     my $r = ClearCase::Argv->new('des',['-fmt','a b'],'.')->qx;
     $final += printok($r eq 'a b');
-}
-
-print qq(
-************************************************************************
-Skipping error reporting, especially in ipc mode
-The system command is there to check that the label type is really
-not defined...
-************************************************************************
-);
-{
-  ClearCase::Argv->ipc(1);
-  my $ct = ClearCase::Argv->new;
-  print "Expected: one single report about NON_EXISTING_TYPE\n";
-  $ct->argv(qw(des -s lbtype:NON_EXISTING_TYPE))->system;
-  my $r1 = $ct->argv(qw(des -s lbtype:NON_EXISTING_TYPE))->stderr(0)->qx;
-  $ct->ctcmd(1); #works or not...
-  my $r2 = $ct->argv(qw(des -s lbtype:NON_EXISTING_TYPE))->stderr(0)->qx;
-  $final += printok(!$r1 and !$r2);
 }
 
 print qq(

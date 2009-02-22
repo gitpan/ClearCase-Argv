@@ -1,6 +1,6 @@
 #!/usr/local/bin/perl
 
-##   This script goes through all known VOB's, locking them and backing
+##   This script goes through all known VOBs, locking them and backing
 ## them up with GNU tar into compressed archive files in a place of your
 ## choosing. Or specific VOB tags can be given on the command line.
 ## It deliberately does not back up the c/cdft area as this is large
@@ -20,8 +20,8 @@ Argv->attropts;		# parse @ARGV for -/flags
 ClearCase::Argv->cleartool('/usr/atria/bin/cleartool');
 
 use Getopt::Long;
-use vars qw(%Opt);
-GetOptions(\%Opt, qw(backupdir=s comment=s z));
+use vars qw(%opt);
+GetOptions(\%opt, qw(backupdir=s comment=s rgy z));
 
 chomp(@ARGV = grep !/tmp$/,
     ClearCase::Argv->new(qw(lsvob -s))->noexec(0)->stdout(1)->qx) if !@ARGV;
@@ -29,7 +29,7 @@ chomp(@ARGV = grep !/tmp$/,
 my $rc = 0;
 
 my $lock = ClearCase::Argv->new('lock');
-$lock->opts('-c', $Opt{comment}) if $Opt{comment};
+$lock->opts('-c', $opt{comment}) if $opt{comment};
 my $unlock = ClearCase::Argv->new('unlock');
 my $tar = Argv->new;
 
@@ -50,12 +50,12 @@ for my $tag (@ARGV) {
     } else {
 	warn "\n= ", scalar(localtime), "\n+ cd $stg\n";
     }
-    my $d = $Opt{backupdir} || $stg;
+    my $d = $opt{backupdir} || $stg;
     (my $v = $tag) =~ s%^\W+%%;
     next if $lock->args("vob:$tag")->system;
     unlink("$d/$v.tar") if !$tar->noexec;
     my $cmd = "gtar -cf $d/$v.tar $v.vbs $v.vbs/d/ddft/* $v.vbs/s/sdft/*";
-    $pass ++ if $tar->args($cmd)->stdout(1)->system;
+    $pass++ if $tar->args($cmd)->stdout(1)->system;
     $pass++ if $unlock->args("vob:$tag")->system;
     $rc += $pass;
     next if $pass;
@@ -64,10 +64,16 @@ for my $tag (@ARGV) {
 }
 warn "\n= ", scalar(localtime), "\n";
 
-if ($Opt{z} && @backups) {
-    if ($Opt{backupdir}) {
-	die "$Opt{backupdir}: $!" if !chdir($Opt{backupdir});
-	warn "\n+ cd $Opt{backupdir}\n";
+if ($opt{rgy}) {
+    my $r = ($opt{backupdir} || '/var/tmp') . 'config.tar.gz';
+    my $d = '/var/adm/rational/clearcase';
+    $rc++ if Argv->new(qw(gtar -cf), $r, $d)->system;
+}
+
+if ($opt{z} && @backups) {
+    if ($opt{backupdir}) {
+	die "$opt{backupdir}: $!" if !chdir($opt{backupdir});
+	warn "\n+ cd $opt{backupdir}\n";
     }
     $rc++ if Argv->new(qw(gzip --force), @backups)->system;
     warn "\n= ", scalar(localtime), "\n";

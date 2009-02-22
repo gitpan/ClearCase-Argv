@@ -1,4 +1,5 @@
-use ClearCase::Argv qw(ctsystem ctqx qv);
+use ClearCase::Argv qw(ctsystem ctqx);
+use Argv qw(qv);
 
 ClearCase::Argv->attropts;
 

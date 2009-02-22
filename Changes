@@ -280,3 +280,26 @@ Revision history for Perl extension ClearCase::Argv.
 
 1.40 Mon Sep  8 12:46:08 EDT 2008
 	- Fixed merge skew in setview and CCreport example scripts.
+
+1.41 Mon Oct  6 18:17:31 GMTDT 2008
+	- Preliminary, tentative changes for CygWin support
+
+1.42 Sun Dec 14 10:13:21 GMT 2008
+	- exit code in the END clause and in DESTROY, from the cygwin branch
+	- restored cleartool -status, new workaround for ClearCase setview bug
+	- restricted the setview test to dynamic views
+	- added one test case for setview -exec constructs
+	- fix (Tatiana Shpichko) to bmccug example
+	- reintroduced the handling of interactive comments in ipc mode
+
+1.43 Sat Feb 21 19:19:26 GMTST 2009
+	- under CYGWIN, force the default to ipc mode (in exec)
+	- extracted the setview tests under an r directory (regression)
+	- moved the stout/stderr test cases there as well
+	- setview handling in unix directly via system and qx
+	- removed a case of stickiness of stderr(0)
+	- support for stdout(0)->qx: returning only stderr
+	- removed testing for bad quoting patterns
+	- under ctcmd, reset ipc apart on cygwin (CtCmd won't install there)
+	- fix to respect \n in comments under cygwin, and testing
+	- All changes from 1.41 through here contributed by Marc Girod.

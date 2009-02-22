@@ -24,6 +24,7 @@
 	</ul>
 
 	<li><a href="#grand_unification">GRAND UNIFICATION</a></li>
+	<li><a href="#testing">TESTING</a></li>
 </ul>
 <!-- INDEX END -->
 
@@ -102,6 +103,15 @@ a line like:
 There's a great deal of option-processing power inherited from the
 base class, much more in fact than most users will care about. Look
 in the PODs for more.
+<p></p>
+<li><strong><a name="item_cygwin_support">Cygwin Support</a></strong><br />
+</li>
+Version 1.43 introduces experimental support for Cygwin on Windows
+platforms. This is meant to be installed on the Cygwin perl, and
+used under it (and not the Windows installation of perl).
+<p>The new support concerns the conversion of paths between Windows
+and Cygwin syntaxes, as well as the standardization of end-of-lines
+conventions.  It is particularly useful under a ClearCase::Wrapper.</p>
 <p></p></ul>
 <p>
 </p>
@@ -227,6 +237,14 @@ have not yet removed it from CPAN since some people still use it.</p>
 cleartool commands via the traditional <code>process spawning</code> model OR via
 the specialty APIs (<strong>IPC</strong> or <strong>ClearCase::CtCmd</strong>).  Writing to the
 ClearCase::Argv API sets you free from that decision until runtime.</p>
+<p>
+</p>
+<hr />
+<h1><a name="testing">TESTING</a></h1>
+<p>Some regression testing cases were extracted from the main test.pl, which
+is meant as a fast smoke test, into an <code>r</code> sub-directory.</p>
+<p>They are accessible one by one with e.g.:
+<code>make test TEST_FILE=r/setup</code></p>
 
 </body>
 

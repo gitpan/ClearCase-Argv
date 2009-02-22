@@ -1,12 +1,13 @@
 package ClearCase::Argv;
 
-$VERSION = '1.40';
+$VERSION = '1.43';
 
 use Argv 1.23;
-use Text::ParseWords;
 
-use constant MSWIN => $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
-my $NUL = MSWIN ? 'NUL' : '/dev/null';
+use constant MSWIN	=> $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
+use constant CYGWIN	=> $^O =~ /cygwin/i ? 1 : 0;
+
+my $NUL = MSWIN && !CYGWIN ? 'NUL' : '/dev/null';
 
 @ISA = qw(Argv);
 %EXPORT_TAGS = ( 'functional' => [ qw(ctsystem ctexec ctqx ctqv ctpipe chdir) ] );
@@ -17,9 +18,18 @@ my $NUL = MSWIN ? 'NUL' : '/dev/null';
 use strict;
 
 my $class = __PACKAGE__;
+my $cygpfx = '';
+if (CYGWIN) {
+    require Text::ParseWords;
+    $class->inpathnorm(1);
+    $class->outpathnorm(1);
+    $cygpfx = (split/ +/,(`df /tmp`)[1])[0];
+}
 my %pidcount;
 END {
+  my $ret = $?;
   ClearCase::Argv->ipc(0); #Kill any remaining coprocess
+  $? |= $ret;
 }
 # For programming purposes we can't allow per-user preferences.
 if ($ENV{CLEARCASE_PROFILE}) {
@@ -40,8 +50,8 @@ my @ct = ('cleartool');
 # try excruciatingly hard, it would take unwarranted time. And don't
 # do so at all if running setuid or as root. If this doesn't work,
 # the path can be set explicitly via the 'cleartool_path' class method.
-if (!MSWIN && ($< == 0 || $< != $>)) {
-    # running setuid or as root
+if (!MSWIN && ($< == 0 || $< != $>  || !grep{$_}@ENV{qw(PATH ATRIAHOME)})) {
+    # running as root, or setuid, even if the same user as the suid one...
     @ct = ('/opt/rational/clearcase/bin/cleartool');
 } elsif ($ENV{PATH} !~ m%\W(atria|ClearCase)\Wbin\b%i) {
     if (!MSWIN) {
@@ -81,7 +91,9 @@ sub prog {
     if (@_ || ref($prg) || $prg =~ m%^/|^\S*cleartool% || $self->ctcmd) {
 	return $self->SUPER::prog($prg, @_);
     } else {
-	return $self->SUPER::prog([@ct, parse_line('\s+', 1, $prg)], @_);
+	require Text::ParseWords;
+	return $self->SUPER::prog([@ct,
+	    Text::ParseWords::parse_line('\s+', 1, $prg)], @_);
     }
 }
 
@@ -89,6 +101,7 @@ sub prog {
 sub exec {
     $class->new(@_)->exec if !ref($_[0]) || ref($_[0]) eq 'HASH';
     my $self = shift;
+    $self->ipc(1) if CYGWIN;
     if ($self->ctcmd) {
 	exit $self->system(@_) >> 8;
     } elsif ($self->ipc) {
@@ -104,12 +117,22 @@ sub exec {
 sub system {
     return $class->new(@_)->system if !ref($_[0]) || ref($_[0]) eq 'HASH';
     my $self = shift;
+    my @rargs = @_;
+    $self->_cvt_input_cw() if CYGWIN;
 
-    return $self->SUPER::system(@_) unless $self->ctcmd || $self->ipc;
+    if (!$self->ctcmd && !$self->ipc) {
+        if (CYGWIN) {
+	    my @ret = $self->SUPER::qv(@rargs);
+	    $self->unixpath(@ret);
+	    print join("", @ret), "\n" if @ret;
+	    return;
+	} else {
+	    return $self->SUPER::system(@rargs);
+	}
+    }
 
     my $envp = $self->envp;
     my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
-    $self->stderr(0) unless $efd; #workaround for destructive reading
     $self->args($self->glob) if $self->autoglob;
     my @prog = @{$self->{AV_PROG}};
     shift(@prog) if $prog[0] =~ m%cleartool%;
@@ -159,7 +182,16 @@ sub system {
 	}
 	$rc = $ctc->status;
     } else {
-	$rc = $self->_ipc_cmd(undef, @cmd);
+        if ($cmd[0] eq 'setview') {
+	    if ($cmd[1] eq '-exec') {
+	        my @c = @cmd;
+		unshift @c, @ct;
+		return system(@c);
+	    }
+	    $self->ipc(0);
+	    return $self->ipc($cmd[1]);
+	}
+        $rc = $self->_ipc_cmd(undef, $ofd, $efd, @cmd);
     }
     open(STDOUT, '>&_O'); close(_O);
     open(STDERR, '>&_E'); close(_E);
@@ -173,15 +205,22 @@ sub system {
 sub qx {
     return $class->new(@_)->qx if !ref($_[0]) || ref($_[0]) eq 'HASH';
     my $self = shift;
+    my @rargs = @_;
+    $self->_cvt_input_cw() if CYGWIN;
 
-    return $self->SUPER::qx(@_) unless $self->ctcmd || $self->ipc;
+    unless ($self->ctcmd || $self->ipc) {
+        my @ret = $self->SUPER::qx(@rargs);
+        if (CYGWIN) {
+	    $self->unixpath(@ret);
+        }
+        return wantarray? @ret : join '', @ret;
+    }
 
     my($rc, $data, $errors);
     my $dbg = $self->dbglevel;
 
     my $envp = $self->envp;
     my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
-    $self->stderr(0) unless $efd; #workaround for destructive reading
     $self->args($self->glob) if $self->autoglob;
     my @prog = @{$self->{AV_PROG}};
     shift(@prog) if $prog[0] =~ m%cleartool%;
@@ -237,8 +276,20 @@ sub qx {
 	    return $data;
 	}
     } else {
+        if ($cmd[0] eq 'setview') {
+	    if ($cmd[1] eq '-exec') {
+	        my @c = @cmd;
+		$c[2] = q(') . $c[2] . q(');
+		unshift @c, @ct;
+		my $ret = qx(@c);
+		chomp($ret) if $self->autochomp;
+		return wantarray? split(/\n/, $ret) : $ret;
+	    }
+            $self->ipc(0);
+            return $self->ipc($cmd[1]);
+        }
 	my @data = ();
-	$rc = $self->_ipc_cmd(\@data, @cmd);
+	$rc = $self->_ipc_cmd(\@data, $ofd, $efd, @cmd);
 	print STDERR "+ (\$? == $?)\n" if $dbg > 1;
 	if (wantarray) {
 	    chomp(@data) if $self->autochomp;
@@ -287,12 +338,27 @@ sub pipe {
 # Normalizes a path to Unix style (forward slashes).
 sub unixpath {
     my $self = shift;
-    $self->SUPER::unixpath(@_);
+    if (CYGWIN) {
+	for my $line (@_) {
+	    my $nl = chomp $line;
+	    my @words = Text::ParseWords::parse_line('\s+', 1, $line);
+	    map {
+	        s%\\%/%g if m%(^(\..*|"|[A-Za-z]:|\w+)|\@)\\%;
+	        if (m%\A([A-Za-z]):(.*)\Z%) {
+		    $_ = "/cygdrive/" . lc($1) . $2;
+		}
+	    } @words;
+	    $line = join ' ', @words;
+	    $line .= "\n" if $nl;
+	}
+    } else {
+        $self->SUPER::unixpath(@_);
+    }
     # Now apply CC-specific, @@-sensitive transforms to partial lines.
     for my $line (@_) {
 	my $fixed = '';
-	for (split(m%(\S+@@\S+)%, $line)) {
-	    s%\\%/%g if m%^\S+@@\S+$%;
+	for (split(m%(\S+@@\S*)%, $line)) {
+	    s%\\%/%g if m%^.*?\S+@@%;
 	    $fixed .= $_;
 	}
 	$line = $fixed;
@@ -305,6 +371,9 @@ sub ctcmd {
     my $level = shift;
     $level = 2 if !defined($level) && !defined(wantarray);
     if ($level) {
+        if ($self->ipc and !CYGWIN) {
+	    $self->ipc(0);	# shut the ipc down
+	}
 	eval { require ClearCase::CtCmd };
 	if ($@) {
 	    my $msg = $@;
@@ -332,8 +401,8 @@ sub ctcmd {
 			Win32::OLE->Option(Warn => 0);
 		    }
 		} else {
-		    warn("Warning: $msg, using fork/exec instead\n")
-			if $level == 2;
+		    my $rep = CYGWIN? "ipc" : "fork/exec";
+		    warn("Warning: $msg, using $rep instead\n") if $level == 2;
 		    return undef;
 		}
 	    } else {
@@ -347,9 +416,6 @@ sub ctcmd {
     if (defined($level)) {
 	if ($level) {
 	    ClearCase::CtCmd->VERSION(1.01) if $ClearCase::CtCmd::VERSION;
-	    if ($self->ipc) {
-		$self->ipc(0);	# shut the ipc down
-	    }
 	    $self->{CCAV_CTCMD} = 1;
 	    # If setting a class attribute, export it to the
 	    # env in case we fork a child using ClearCase::Argv.
@@ -455,7 +521,7 @@ sub ipc {
     if ($self->ctcmd) {
 	$self->ctcmd(0);	# shut down the CtCmd connection
     }
-    if (exists($class->{IPC})) {
+    if (exists($class->{IPC}) and $level =~ m%^\d+$%) {
         if (($self ne $class) and !$self->ipc) {
 	    ++$pidcount{$class->{IPC}->{PID}};
 	    $self->{IPC}->{PID}  = $class->{IPC}->{PID};
@@ -464,12 +530,15 @@ sub ipc {
 	}
 	return $self;
     }
+
     # This should never fail to load since it's built in.
     require IPC::Open3;
 
     # Dies on failure.
     my($down, $back);
-    my $pid = IPC::Open3::open3($down, $back, undef, @ct);
+    my @cmd = ($level =~ /^\d+$/) ? (@ct, '-status')
+        : (@ct, qw(setview -exec), q(cleartool -status), $level);
+    my $pid = IPC::Open3::open3($down, $back, undef, @cmd);
 
     # Set the "line discipline" to convert CRLF to \n.
     binmode $back, ':crlf';
@@ -482,17 +551,25 @@ sub ipc {
     return $self;
 }
 
-sub _ipc_cmd {
+sub _cvt_input_cw($) {
     my $self = shift;
-    my $disposition = shift;
+    map {
+        s%^/cygdrive/([A-Za-z])%$1:%;
+	$_ = "${cygpfx}$_" if m%^/[^/]% and -r $_;
+    } @{$self->{AV_ARGS}};
+}
+
+sub _ipc_cmd($$$$@) {
+    my $self = shift;
+    my ($disposition, $stdout, $stderr, @cmd) = @_;
 
     # Handle verbosity.
     my $dbg = $self->dbglevel;
-    $self->_dbg($dbg, '=>', \*STDERR, @_) if $dbg;
+    $self->_dbg($dbg, '=>', \*STDERR, @cmd) if $dbg;
 
     # Send the command to cleartool.
     my $cmd =
-      join(' ', map {/\s/ && !(/^'.+'$/ || /^".+"$/) ? qq("$_") : $_} @_);
+        join(' ', map {/\s/ && !(/^'.+'$/ || /^".+"$/) ? qq("$_") : $_} @cmd);
     chomp $cmd;
     my $down = $self->{IPC}->{DOWN};
     print $down $cmd, "\n";
@@ -503,49 +580,52 @@ sub _ipc_cmd {
 	print $down $input, "\n.\n";
 	delete $self->{IPC}->{COMMENT};
     }
-    # Hack to simulate 'cleartool -status', until ClearCase bug fix
-    print $down "des -fmt \"Command 0 returned status 0\\n\" .\n";
 
     # Read back the results and get command status.
     my $rc = 0;
     my $back = $self->{IPC}->{BACK};
     while($_ = <$back>) {
-        my ($last, $next);
+        my ($last, $next, $err);
 	my $out = *STDOUT;
-	if (m%^cleartool: (Error|Warning):%) {      #Simulate -status
-	    $rc += 1 << 8 if $1 eq 'Error';
-	    if ($self->stderr) {
+	if (m%^cleartool: (Error|Warning):%) {
+	    if ($stderr) {
 	        $out = *STDERR;
+	        $err = 1;
 	    } else {
-	        $self->stderr(0); # Restore after destructive read
 	        $next = 1;
+	    }
+	}
+	if (m%^Comments for %) {
+	  if ($disposition) {
+	    push(@$disposition, $_);
+	  } else {
+	    print $out $_;
+	  }
+	  while (<>) {
+	        chomp;
+		s%\r$%% if MSWIN;
+		print $down "$_\n";
+	        last if m%^\.$%;
 	    }
 	}
 	if (s%^(.*)Command \d+ returned status (\d+)%$1%) {
 	    # Shift the status up so it looks like an exit status.
-	    # $rc = $2 << 8;                        #-status disabled
+	    $rc = $2 << 8;
 	    chomp;
 	    $_ ? $last = 1 : last;
 	}
 	print '+ <=', $_ if $_ && $dbg >= 2;
 	next if $next;
-	if ($disposition) {
-	    push(@$disposition, $_);
-	} else {
-	    print $out $_;
-	}
-	if (/^Comments for /) {
-	    while (<>) {
-	        chomp;
-		print $down "$_\n";
-	        last if /^\.$/;
+	$self->unixpath($_) if CYGWIN;
+	if ($stdout or $err) {
+	    if ($disposition) {
+	        push(@$disposition, $_);
+	    } else {
+	        print $out $_;
 	    }
-	    print $down ".\n" unless defined($_);
-	    print $down "des -fmt \"Command 0 returned status 0\\n\" .\n";
 	}
 	last if $last;
     }
-
     return $rc;
 }
 
@@ -613,6 +693,10 @@ sub quote {
     # but cleartool gets them right so this quoting is simpler.
     my $inpathnorm = $self->inpathnorm;
     for (@_) {
+	if (CYGWIN) {
+	    s%^/cygdrive/([a-za-z])%$1:%;
+	    s%^/%$cygpfx/%;
+	}
 	# If requested, change / for \ in Windows file paths.
 	s%/%\\%g if $inpathnorm;
 	# Now quote embedded quotes ...
@@ -685,7 +769,9 @@ sub new {
 # Clean up leftover cleartool processes if user forgot to.
 sub DESTROY {
     my $self = shift;
+    my $ret = $?;
     $self->ipc(0) if $self->ipc;
+    $? |= $ret;
 }
 
 1;
@@ -747,7 +833,7 @@ I<ALTERNATE EXECUTION INTERFACES> below for how to invoke them. Sample
 scripts are packaged with I<ClearCase::Argv> in ./examples.
 
 I<As ClearCase::Argv is in most other ways identical to its base
-class>, see C<perldoc Argv> for substantial further documentation.>
+class, see C<perldoc Argv> for substantial further documentation.>
 
 =head2 OVERRIDDEN METHODS
 
@@ -980,8 +1066,8 @@ I suspect there are still some special quoting situations unaccounted
 for in the I<quote> method. This will need to be refined over time. Bug
 reports or patches gratefully accepted.
 
-Commands using a format option defining a multiline output fail in many
-cases in fork mode, because of the underlying Argv module.
+Commands using a format option defining a multi-line output fail in
+many cases in fork mode, because of the underlying Argv module.
 
 ClearCase::Argv will use IPC::ChildSafe if it finds it, which may 
 introduce differences of behavior with the newer code to replace it.
@@ -990,23 +1076,24 @@ It should probably just drop it, unless explicitly driven to use it.
 Autochomp should be equivalent in all modes on all platforms, which
 is hard to test (ipc w/wo IPC::ChildSafe, ctcmd, on Unix and Windows,
 with system and qx...).
-The autochomp setting should not affect system calls in ipc mode!?
+The autochomp setting should not affect system() in ipc mode!?
 Hopefully it doesn't anymore. Problem: change not satisfactorily tested
 on Windows yet (where the output prior to the last change seemed ok...)
 
-Argv uses the first of three different methods for cloning, and I
-(Marc Girod) suspect that only the first one (Clone, in recent versions)
+Argv uses the first-found of three different modules for cloning, and
+Marc Girod suspects that only the first one (Clone, in recent versions)
 performs correctly with GLOB objects... Work-around in place.
 
 The string 'cleartool' is hard-coded in many places, making it hard to
 implement additional support for multitool commands.
 
-The use of 'cleartool -status' needed to be disabled, and simulated,
-because of a ClearCase bug, with setview exiting the interactive session
-to the shell (Found from 2002.05.00 to 7.0.1).
-The result in an ipc mode using '-status' was: hang.
+The use of 'cleartool -status' was restored, because of the failure to
+handle interactive comments without it. The ClearCase bug, with setview
+exiting the interactive session to the shell (Found from 2002.05.00 to 7.0.1
+and resulting in a hang under the ipc mode) is worked around by starting a
+new coprocess in the new view.
 
-Cygwin is not supported on Windows.
+Cygwin preliminary support on Windows.
 
 The 'exit' cleartool command is dangerous in ipc mode: it will stop the
 coprocess unconditionally, without Argv updating its ipc status, and the
@@ -1021,8 +1108,8 @@ versions. It's currently maintained on Solaris 9 and Windows XP with CC
 7.0 using Perl5.8.x.  Viability on other platforms and/or earlier
 versions is untestable by me.
 
-Marc Girod's testing environment: Solaris 8 and 10, and Windows 2000, 
-without CtCmd and IPC::ChildSafe, with Clone.
+Marc Girod's testing environment: Solaris 8 and 10, and Windows 2000,
+with CtCmd on Windows, without IPC::ChildSafe, with Clone.
 Tatyana Shpichko's testing environment: RedHat Linux 4, with and without
 CtCmd, and Windows XP without CtCmd.
 

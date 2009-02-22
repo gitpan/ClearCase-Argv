@@ -15,7 +15,7 @@ file is an accompanying overview and chronology.
 
 =head1 SUMMARY OF FEATURES
 
-=over 4
+=over 7
 
 =item * Interoperability/Portability
 
@@ -73,6 +73,16 @@ And remove the 'use ClearCase::Argv' line of course.
 There's a great deal of option-processing power inherited from the
 base class, much more in fact than most users will care about. Look
 in the PODs for more.
+
+=item * Cygwin Support
+
+Version 1.43 introduces experimental support for Cygwin on Windows
+platforms. This is meant to be installed on the Cygwin perl, and
+used under it (and not the Windows installation of perl).
+
+The new support concerns the conversion of paths between Windows
+and Cygwin syntaxes, as well as the standardization of end-of-lines
+conventions.  It is particularly useful under a ClearCase::Wrapper.
 
 =back
 
@@ -215,3 +225,11 @@ So, bottom line, C<ClearCase::Argv> now can be told to execute
 cleartool commands via the traditional C<process spawning> model OR via
 the specialty APIs (B<IPC> or B<ClearCase::CtCmd>).  Writing to the
 ClearCase::Argv API sets you free from that decision until runtime.
+
+=head1 TESTING
+
+Some regression testing cases were extracted from the main test.pl, which
+is meant as a fast smoke test, into an C<r> sub-directory.
+
+They are accessible one by one with e.g.:
+C<make test TEST_FILE=r/setup>
