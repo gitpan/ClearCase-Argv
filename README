@@ -233,3 +233,4 @@ is meant as a fast smoke test, into an C<r> sub-directory.
 
 They are accessible one by one with e.g.:
 C<make test TEST_FILE=r/setup>
+or better: C<perl -Mblib r/cygwin>

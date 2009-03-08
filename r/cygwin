@@ -1,0 +1,56 @@
+# -*- cperl -*-
+use strict;
+use Benchmark;
+exit 0 unless $^O eq 'cygwin';
+
+use Test::More tests => 6;
+select(STDERR); $| = 1; select(STDOUT); $| = 1;
+use ClearCase::Argv qw(chdir);
+use File::Temp qw(tempfile);
+use vars qw($out @out);
+
+ClearCase::Argv->summary;      # start keeping stats
+ClearCase::Argv->ipc(1);
+my $ct = ClearCase::Argv->new({autochomp=>1});
+# 1
+my ($csfh, $tmpcs) = tempfile('/tmp/XXXX', SUFFIX => '.cs');
+$ct->argv(q(setcs), $tmpcs); #Do not run!
+$ct->_cvt_input_cw();
+ok ${$ct->{AV_ARGS}}[0] =~ /^\w:\\cygwin/,
+  "Input with rooted path, outside a vob\n";
+unlink $tmpcs;
+# 2
+SKIP: {
+  skip "Requires more thought", 2;
+$out = q(des -s .@@\main\1 \n) . "\n";
+$ct->unixpath($out);
+chomp $out;
+ok $out eq 'des -s .@@/main/1 \n', "Output: \\'s in version, not in \\n\n";
+# 3
+@out = (q(des -s .@@\LB \n) . "\n", q(des -s aa\bb\cc \n) . "\n");
+$ct->unixpath(@out);
+chomp @out;
+ok (($out[0] eq 'des -s .@@/LB \n' and $out[1] eq 'des -s aa/bb/cc \n'),
+    "Same thing in list\n");
+}
+#4
+$out = "aaa\r\n";
+$ct->unixpath($out);
+chomp $out;
+ok $out =~ /\w$/, "Output: \\r removed\n";
+#5
+$out = q(des -s o:\aa\bb@@\main\br\2) . "\n";
+$ct->unixpath($out);
+chomp $out;
+ok $out eq 'des -s /cygdrive/o/aa/bb@@/main/br/2',
+  "Output: drive changed into /cygdrive path\n";
+#6
+@out = (q(o:\aa\bb@@\main\1) . "\n",
+	q(o:\aa\bb@@\main\1) . "\n");
+$ct->unixpath(@out);
+chomp @out;
+ok(($out[0] eq '/cygdrive/o/aa/bb@@/main/1' and
+      $out[1] eq '/cygdrive/o/aa/bb@@/main/1'),
+   "Output: /cygdrive in list\n");
+
+print STDERR "\n", ClearCase::Argv->summary;   # print out the stats we kept

@@ -1,13 +1,13 @@
 package ClearCase::Argv;
 
-$VERSION = '1.43';
+$VERSION = '1.44';
 
 use Argv 1.23;
 
 use constant MSWIN	=> $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
 use constant CYGWIN	=> $^O =~ /cygwin/i ? 1 : 0;
 
-my $NUL = MSWIN && !CYGWIN ? 'NUL' : '/dev/null';
+my $NUL = MSWIN ? 'NUL' : '/dev/null';
 
 @ISA = qw(Argv);
 %EXPORT_TAGS = ( 'functional' => [ qw(ctsystem ctexec ctqx ctqv ctpipe chdir) ] );
@@ -339,29 +339,29 @@ sub pipe {
 sub unixpath {
     my $self = shift;
     if (CYGWIN) {
+        no strict 'subs';
 	for my $line (@_) {
 	    my $nl = chomp $line;
-	    my @words = Text::ParseWords::parse_line('\s+', 1, $line);
+	    $line =~ s/\r$//;
+	    my @bit = Text::ParseWords::parse_line('\s+', 'delimiters', $line);
 	    map {
-	        s%\\%/%g if m%(^(\..*|"|[A-Za-z]:|\w+)|\@)\\%;
-	        if (m%\A([A-Za-z]):(.*)\Z%) {
-		    $_ = "/cygdrive/" . lc($1) . $2;
-		}
-	    } @words;
-	    $line = join ' ', @words;
+	        s%\\%/%g if m%(?:^(?:\..*|"|[A-Za-z]:|\w*)|\@)\\%;
+		$_ = "/cygdrive/" . lc($1) . $2 if m%\A([A-Za-z]):(.*)\Z%;
+	    } grep{$_ and /\S/} @bit;
+	    $line = join '', grep {$_} @bit;
 	    $line .= "\n" if $nl;
 	}
     } else {
         $self->SUPER::unixpath(@_);
-    }
-    # Now apply CC-specific, @@-sensitive transforms to partial lines.
-    for my $line (@_) {
-	my $fixed = '';
-	for (split(m%(\S+@@\S*)%, $line)) {
-	    s%\\%/%g if m%^.*?\S+@@%;
-	    $fixed .= $_;
+	# Now apply CC-specific, @@-sensitive transforms to partial lines.
+	for my $line (@_) {
+	    my $fixed = '';
+	    for (split(m%(\S+@@\S*)%, $line)) {
+	        s%\\%/%g if m%^.*?\S+@@%;
+		$fixed .= $_;
+	    }
+	    $line = $fixed;
 	}
-	$line = $fixed;
     }
 }
 
@@ -551,15 +551,21 @@ sub ipc {
     return $self;
 }
 
-sub _cvt_input_cw($) {
+sub _cvt_input_cw {
     my $self = shift;
     map {
         s%^/cygdrive/([A-Za-z])%$1:%;
-	$_ = "${cygpfx}$_" if m%^/[^/]% and -r $_;
+	if (m%^/[^/]%) {
+	    if (-r $_) {
+	        $_ = "${cygpfx}$_";
+	    } else {
+	        s%^/%\\%; # case of vob tags
+	    }
+	}
     } @{$self->{AV_ARGS}};
 }
 
-sub _ipc_cmd($$$$@) {
+sub _ipc_cmd {
     my $self = shift;
     my ($disposition, $stdout, $stderr, @cmd) = @_;
 
@@ -568,8 +574,9 @@ sub _ipc_cmd($$$$@) {
     $self->_dbg($dbg, '=>', \*STDERR, @cmd) if $dbg;
 
     # Send the command to cleartool.
-    my $cmd =
-        join(' ', map {/\s/ && !(/^'.+'$/ || /^".+"$/) ? qq("$_") : $_} @cmd);
+    my $cmd = join(' ', map {
+        m%\s|[\[\]\*]% && !(m%^'.+'$% || m%^".+"$%) ? qq("$_") : $_
+    } @cmd);
     chomp $cmd;
     my $down = $self->{IPC}->{DOWN};
     print $down $cmd, "\n";

@@ -1,0 +1,11 @@
+# http://module-build.sourceforge.net/META-spec.html
+#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
+name:         ClearCase-Argv
+version:      1.44
+version_from: Argv.pm
+installdirs:  site
+requires:
+    Argv:                          1.22
+
+distribution_type: module
+generated_by: ExtUtils::MakeMaker version 6.30
