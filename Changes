@@ -302,7 +302,6 @@ Revision history for Perl extension ClearCase::Argv.
 	- removed testing for bad quoting patterns
 	- under ctcmd, reset ipc apart on cygwin (CtCmd won't install there)
 	- fix to respect \n in comments under cygwin, and testing
-	- All changes from 1.41 through here contributed by Marc Girod.
 
 1.44 Sun Mar  1 17:11:39 GMTST 2009
 	- cygwin: restored \r removal at the end of lines, unskipped test
@@ -311,3 +310,28 @@ Revision history for Perl extension ClearCase::Argv.
 	- cygwin: convert the backslashes of vob tags as well (I/O)
 	- ipc: quote all input arguments containing special characters
 	- removed function prototypes (code style consistency)
+
+1.45 Sat Apr 25 15:56:41 BST 2009
+	- mkattr: added a regression test case, and quoting of string values
+	- quoting of quotes revisited, especially under cygwin
+	- support for /view under cygwin
+	- unix/ipc/setview: managed the standard error
+	- r/stdouterr: fork was ok and ipc wrong--fixed the test cases, added 2
+	- fixed both ipc and ctcmd to get the stdouterr tests pass
+	- ALL CHANGES FROM 1.41 THROUGH HERE CONTRIBUTED BY Marc Girod.
+
+BACKWARD COMPATIBILITY NOTES:
+
+A case was reported in which changes in 1.44 broke backward
+compatibility, in the domain of quoting arguments.  This is
+unfortunate, and was fixed in the critical cases (eg mkattr).
+However, the changes were not gratuitous, and actually fixed
+discrepancies between the behavior in the different modes and added
+e.g. support for the use of quotes inside comments. So they were
+not withdrawn, with the effect that total backwards compatibility
+was not restored.
+
+Version 1.45 again brings some amount of backwards incompatibilities,
+with fixes to the way std output and error may be redirected or thrown
+away. The benefit in increased functionality and consistency is once
+again considered worth the while.

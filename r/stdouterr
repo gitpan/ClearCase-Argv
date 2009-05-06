@@ -1,7 +1,7 @@
 # -*- perl -*-
 use strict;
 use Benchmark;
-use Test::More tests => 10;
+use Test::More tests => 14;
 select(STDERR); $| = 1; select(STDOUT); $| = 1;
 use ClearCase::Argv qw(chdir);
 use File::Temp qw(tempfile);
@@ -16,8 +16,8 @@ my ($errfh, $tmperr) = tempfile();
 open(SAVEOUT, ">&STDOUT");
 open(SAVEERR, ">&STDERR");
 # Test 1
-*STDOUT = $outfh;
-*STDERR = $errfh;
+open(STDOUT, ">$tmpout");
+open(STDERR, ">$tmperr");
 my $rc = $ct->argv(@cmd)->system;
 close(STDOUT);
 close(STDERR);
@@ -25,59 +25,27 @@ open(STDOUT, ">&SAVEOUT");
 open(STDERR, ">&SAVEERR");
 my @expout = read_file($tmpout);
 my @experr = read_file($tmperr);
-ok (($rc and @expout and @experr), 'system: ret code, stdout and stderr.');
+my $expoutok = @expout and $expout[0] =~ /^\.\@\@/;
+my $experrok = @experr and $experr[0] =~ /^cleartool: Error: Unable to access/;
+ok (($rc and $expoutok and $experrok), 'system: ret code, stdout and stderr.');
 write_file($tmpout, ());
 write_file($tmperr, ());
+BAIL_OUT('The collection of the expected results failed')
+  unless $rc and $expoutok and $experrok;
 # Test 2
 open(STDOUT, ">$tmpout");
 open(STDERR, ">$tmperr");
-$rc = $ct->argv(@cmd)->stderr(0)->system;
-close(STDOUT);
-close(STDERR);
-open(STDOUT, ">&SAVEOUT");
-open(STDERR, ">&SAVEERR");
-my @lastout = read_file($tmpout);
-ok (($rc and (@lastout eq @expout) and !read_file($tmperr)),
-    'system: stderr ignored, stdout ok.');
-write_file($tmpout, ());
-write_file($tmperr, ());
-# Test 3
-open(STDOUT, ">$tmpout");
-open(STDERR, ">$tmperr");
-$rc = $ct->argv(@cmd)->stdout(0)->system;
+my @lastout = $ct->argv(@cmd)->qx;
 close(STDOUT);
 close(STDERR);
 open(STDOUT, ">&SAVEOUT");
 open(STDERR, ">&SAVEERR");
 my @lasterr = read_file($tmperr);
-ok (($rc and (@lasterr eq @experr) and !read_file($tmpout)),
-    'system: stdout ignored, stderr ok.');
+ok (($rc and (@lastout eq @expout) and (@lasterr eq @experr) and !read_file($tmpout)),
+    'qx: stdout ok, stderr ok.');
 write_file($tmpout, ());
 write_file($tmperr, ());
-# Test 4
-my $err = $ct->argv(@cmd)->stdout(0)->qx;
-ok ($err, 'qx: stdout ignored, stderr ok.');
-# Test 5
-@lastout = $ct->argv(@cmd)->stderr(0)->qx;
-ok (@lastout eq @expout, 'qx: stderr ignored, stdout ok.');
-TODO: {
-  eval { require ClearCase::CtCmd };
-  local $TODO = "redirection not supported in fork model" if $@;
-# Test 6 -- same thing for ctcmd mode, or what emulates it
-$ct->ctcmd(2); #Gives a warning if CtCmd not installed
-open(STDOUT, ">$tmpout");
-open(STDERR, ">$tmperr");
-$rc = $ct->argv(@cmd)->system;
-close(STDOUT);
-close(STDERR);
-open(STDOUT, ">&SAVEOUT");
-open(STDERR, ">&SAVEERR");
-@expout = read_file($tmpout);
-@experr = read_file($tmperr);
-ok (($rc and @expout and @experr), 'system: ret code, stdout and stderr.');
-write_file($tmpout, ());
-write_file($tmperr, ());
-# Test 7
+# Test 3
 open(STDOUT, ">$tmpout");
 open(STDERR, ">$tmperr");
 $rc = $ct->argv(@cmd)->stderr(0)->system;
@@ -90,7 +58,7 @@ ok (($rc and (@lastout eq @expout) and !read_file($tmperr)),
     'system: stderr ignored, stdout ok.');
 write_file($tmpout, ());
 write_file($tmperr, ());
-# Test 8
+# Test 4
 open(STDOUT, ">$tmpout");
 open(STDERR, ">$tmperr");
 $rc = $ct->argv(@cmd)->stdout(0)->system;
@@ -103,12 +71,92 @@ ok (($rc and (@lasterr eq @experr) and !read_file($tmpout)),
     'system: stdout ignored, stderr ok.');
 write_file($tmpout, ());
 write_file($tmperr, ());
-# Test 9
-$err = $ct->argv(@cmd)->stdout(0)->qx;
-ok ($err, 'qx: stdout ignored, stderr ok.');
-# Test 10
+# Test 5
+my $err = $ct->argv(@cmd)->stdout(0)->stderr(1)->qx;
+ok ($err, 'qx: stdout ignored, stderr redirected to stdout ok.');
+# Test 6
+open(STDOUT, ">$tmpout");
+open(STDERR, ">$tmperr");
+my $err = $ct->argv(@cmd)->stdout(0)->qx;
+close(STDOUT);
+close(STDERR);
+open(STDOUT, ">&SAVEOUT");
+open(STDERR, ">&SAVEERR");
+@lasterr = read_file($tmperr);
+ok ((@lasterr eq @experr and !$err), 'qx: stdout ignored, stderr ok.');
+# Test 7
 @lastout = $ct->argv(@cmd)->stderr(0)->qx;
 ok (@lastout eq @expout, 'qx: stderr ignored, stdout ok.');
-}
+eval { require ClearCase::CtCmd };
+# Test 8 -- same thing for ctcmd mode, or what emulates it
+$ct->ctcmd(2); #Gives a warning if CtCmd not installed
+open(STDOUT, ">$tmpout");
+open(STDERR, ">$tmperr");
+@lastout = $ct->argv(@cmd)->qx;
+close(STDOUT);
+close(STDERR);
+open(STDOUT, ">&SAVEOUT");
+open(STDERR, ">&SAVEERR");
+@lasterr = read_file($tmperr);
+ok (($rc and (@lastout eq @expout) and (@lasterr eq @experr) and !read_file($tmpout)),
+    'qx: stdout ok, stderr ok.');
+write_file($tmpout, ());
+write_file($tmperr, ());
+# Test 9
+open(STDOUT, ">$tmpout");
+open(STDERR, ">$tmperr");
+$rc = $ct->argv(@cmd)->system;
+close(STDOUT);
+close(STDERR);
+open(STDOUT, ">&SAVEOUT");
+open(STDERR, ">&SAVEERR");
+@expout = read_file($tmpout);
+@experr = read_file($tmperr);
+ok (($rc and @expout and @experr), 'system: ret code, stdout and stderr.');
+write_file($tmpout, ());
+write_file($tmperr, ());
+# Test 10
+open(STDOUT, ">$tmpout");
+open(STDERR, ">$tmperr");
+$rc = $ct->argv(@cmd)->stderr(0)->system;
+close(STDOUT);
+close(STDERR);
+open(STDOUT, ">&SAVEOUT");
+open(STDERR, ">&SAVEERR");
+@lastout = read_file($tmpout);
+ok (($rc and (@lastout eq @expout) and !read_file($tmperr)),
+    'system: stderr ignored, stdout ok.');
+write_file($tmpout, ());
+write_file($tmperr, ());
+# Test 11
+open(STDOUT, ">$tmpout");
+open(STDERR, ">$tmperr");
+$rc = $ct->argv(@cmd)->stdout(0)->system;
+close(STDOUT);
+close(STDERR);
+open(STDOUT, ">&SAVEOUT");
+open(STDERR, ">&SAVEERR");
+@lasterr = read_file($tmperr);
+ok (($rc and (@lasterr eq @experr) and !read_file($tmpout)),
+    'system: stdout ignored, stderr ok.');
+write_file($tmpout, ());
+write_file($tmperr, ());
+# Test 12
+$err = $ct->argv(@cmd)->stdout(0)->stderr(1)->qx;
+ok ($err, 'qx: stdout ignored, stderr redirected to stdout ok.');
+# Test 13
+open(STDOUT, ">$tmpout");
+open(STDERR, ">$tmperr");
+$err = $ct->argv(@cmd)->stdout(0)->qx;
+close(STDOUT);
+close(STDERR);
+open(STDOUT, ">&SAVEOUT");
+open(STDERR, ">&SAVEERR");
+@lasterr = read_file($tmperr);
+ok ((@lasterr eq @experr and !$err), 'qx: stdout ignored, stderr ok.');
+# Test 14
+@lastout = $ct->argv(@cmd)->stderr(0)->qx;
+ok (@lastout eq @expout, 'qx: stderr ignored, stdout ok.');
+
 unlink $tmpout, $tmperr;
 print STDERR "\n", ClearCase::Argv->summary;   # print out the stats we kept

@@ -30,16 +30,15 @@ my $view2;
 }
 if ($view2) {
     my $obj2 = ClearCase::Argv->new({autochomp=>1});
-    $obj2->argv('setview', $view2)->stderr(0)->system;
     $view1 = $obj1->argv(qw(pwv -s))->qx;
+    my $cwd = $obj1->argv('pwd')->qx;
+    $obj2->argv('setview', $view2)->stderr(0)->system;
     $view2 = $obj2->argv(qw(pwv -s))->qx;
     print "Current views in two ipc objects: 1: $view1; 2: $view2\n";
     die "Failed setview\n" unless $view1 and $view2 and ($view1 ne $view2);
-    my $cwd = $obj1->argv('pwd')->qx;
-    chdir('/');
     my $v22 = $obj1->argv(qw(setview -exec),
 			  '/opt/rational/clearcase/bin/cleartool pwv -s',
-			  $view2)->qx;
+			  $view2)->stderr(0)->qx;
     chdir($cwd);
     die "Failed setview -exec" unless $v22 eq $view2;
 } else {

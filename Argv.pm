@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.44';
+$VERSION = '1.45';
 
 use Argv 1.23;
 
@@ -184,12 +184,10 @@ sub system {
     } else {
         if ($cmd[0] eq 'setview') {
 	    if ($cmd[1] eq '-exec') {
-	        my @c = @cmd;
-		unshift @c, @ct;
-		return system(@c);
+		return $self->stderr($efd)->SUPER::system;
 	    }
 	    $self->ipc(0);
-	    return $self->ipc($cmd[1]);
+	    return $self->ipc($cmd[1], $efd);
 	}
         $rc = $self->_ipc_cmd(undef, $ofd, $efd, @cmd);
     }
@@ -243,11 +241,18 @@ sub qx {
 	    ($rc, $data, $errors) = $ctc->exec(@cmd);
 	}
 	$data ||= '';
+         if ($data) {
+             if (!$ofd) {
+                 $data = '';
+             } elsif ($ofd == 2) {
+                 print STDERR $data;
+             }
+         }
 	if ($errors) {
 	    if ($efd == 1) {
-		$data .= $errors;
+	        $data .= $errors;
 	    } elsif ($efd == 2) {
-		print STDERR $errors;
+	        print STDERR $errors;
 	    }
 	}
 	print STDERR "+ (\$? == $?)\n" if $dbg > 1;
@@ -278,15 +283,12 @@ sub qx {
     } else {
         if ($cmd[0] eq 'setview') {
 	    if ($cmd[1] eq '-exec') {
-	        my @c = @cmd;
-		$c[2] = q(') . $c[2] . q(');
-		unshift @c, @ct;
-		my $ret = qx(@c);
+		my $ret = $self->stderr($efd)->SUPER::qx;
 		chomp($ret) if $self->autochomp;
 		return wantarray? split(/\n/, $ret) : $ret;
 	    }
             $self->ipc(0);
-            return $self->ipc($cmd[1]);
+            return $self->ipc($cmd[1], $efd);
         }
 	my @data = ();
 	$rc = $self->_ipc_cmd(\@data, $ofd, $efd, @cmd);
@@ -342,12 +344,18 @@ sub unixpath {
         no strict 'subs';
 	for my $line (@_) {
 	    my $nl = chomp $line;
-	    $line =~ s/\r$//;
+	    $line =~ s%\r$%%;
+	    $line =~ s%'%\\'%g;
 	    my @bit = Text::ParseWords::parse_line('\s+', 'delimiters', $line);
 	    map {
+	        s%\\'%'%g;
 	        s%\\%/%g if m%(?:^(?:\..*|"|[A-Za-z]:|\w*)|\@)\\%;
-		$_ = "/cygdrive/" . lc($1) . $2 if m%\A([A-Za-z]):(.*)\Z%;
-	    } grep{$_ and /\S/} @bit;
+		if (m%\A([A-Za-z]):(.*)\Z%) {
+		  $_ = "/cygdrive/" . lc($1) . $2;
+		} else {
+		  s%^//view%/view%;
+		}
+	    } grep { $_ and m%\S% } @bit;
 	    $line = join '', grep {$_} @bit;
 	    $line .= "\n" if $nl;
 	}
@@ -503,6 +511,7 @@ sub ipc {
     my $self = shift;	# this might be an instance or a classname
     no strict 'refs';	# because $self may be a symbolic hash ref
     my $level = shift;
+    my $stderr = shift;
     if (defined($level) && !$level) {
 	return 0 unless exists($self->{IPC});
 	my $down = $self->{IPC}->{DOWN};
@@ -536,12 +545,22 @@ sub ipc {
 
     # Dies on failure.
     my($down, $back);
-    my @cmd = ($level =~ /^\d+$/) ? (@ct, '-status')
-        : (@ct, qw(setview -exec), q(cleartool -status), $level);
+    my $view = ($level =~ /^\d+$/) ? '' : $level;
+    my @cmd = !$view ? (@ct, '-status')
+      : (@ct, qw(setview -exec), q(cleartool -status), $view);
     my $pid = IPC::Open3::open3($down, $back, undef, @cmd);
 
     # Set the "line discipline" to convert CRLF to \n.
     binmode $back, ':crlf';
+
+    if ($view) {
+      print $down "des -fmt '\\n' .\n";
+      my $out = ($stderr == 2) ? *STDERR : *STDOUT;
+      while ($_ = <$back>) {
+	last if /^Command 1 returned status/;
+	print $out $_ if $stderr;
+      }
+    }
 
     $self->{IPC}->{DOWN} = $down;
     $self->{IPC}->{BACK} = $back;
@@ -559,7 +578,7 @@ sub _cvt_input_cw {
 	    if (-r $_) {
 	        $_ = "${cygpfx}$_";
 	    } else {
-	        s%^/%\\%; # case of vob tags
+		s%^/view%//view% or s%^/%\\%; # case of vob tags
 	    }
 	}
     } @{$self->{AV_ARGS}};
@@ -575,7 +594,7 @@ sub _ipc_cmd {
 
     # Send the command to cleartool.
     my $cmd = join(' ', map {
-        m%\s|[\[\]\*]% && !(m%^'.+'$% || m%^".+"$%) ? qq("$_") : $_
+        m%\s|[\[\]*"']% ? (m%'% ? (m%"% ? $_ : qq("$_")) : qq('$_')) : $_
     } @cmd);
     chomp $cmd;
     my $down = $self->{IPC}->{DOWN};
@@ -601,8 +620,7 @@ sub _ipc_cmd {
 	    } else {
 	        $next = 1;
 	    }
-	}
-	if (m%^Comments for %) {
+	} elsif (m%^Comments for %) {
 	  if ($disposition) {
 	    push(@$disposition, $_);
 	  } else {
@@ -614,8 +632,7 @@ sub _ipc_cmd {
 		print $down "$_\n";
 	        last if m%^\.$%;
 	    }
-	}
-	if (s%^(.*)Command \d+ returned status (\d+)%$1%) {
+	} elsif (s%^(.*)Command \d+ returned status (\d+)%$1%) {
 	    # Shift the status up so it looks like an exit status.
 	    $rc = $2 << 8;
 	    chomp;
@@ -624,8 +641,8 @@ sub _ipc_cmd {
 	print '+ <=', $_ if $_ && $dbg >= 2;
 	next if $next;
 	$self->unixpath($_) if CYGWIN;
-	if ($stdout or $err) {
-	    if ($disposition) {
+	if ($stdout or ($err and $stderr)) {
+	    if ($disposition and (($err and $stderr == 1) or (!$err and $stdout == 1))) {
 	        push(@$disposition, $_);
 	    } else {
 	        print $out $_;

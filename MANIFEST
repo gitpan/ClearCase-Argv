@@ -31,6 +31,7 @@ examples/bench/README
 examples/bench/read-bm.pl
 examples/bench/write-bm.pl
 r/cygwin
+r/mkattr
 r/setview
 r/stdouterr
 test.pl
