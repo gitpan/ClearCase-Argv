@@ -318,6 +318,14 @@ Revision history for Perl extension ClearCase::Argv.
 	- unix/ipc/setview: managed the standard error
 	- r/stdouterr: fork was ok and ipc wrong--fixed the test cases, added 2
 	- fixed both ipc and ctcmd to get the stdouterr tests pass
+
+1.46 
+	- cygwin: odd numbers of quotes in the output
+	- debug mode: print the commands as sent to cleartool (after quoting)
+	- ipc mode: fix for examples of errors in the text of man pages
+	- ipc mode: question marks in the comments
+	- cygwin: support for ci -from outside the vob
+	- cygwin: support for mounting views under /view
 	- ALL CHANGES FROM 1.41 THROUGH HERE CONTRIBUTED BY Marc Girod.
 
 BACKWARD COMPATIBILITY NOTES:

@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.45';
+$VERSION = '1.46';
 
 use Argv 1.23;
 
@@ -345,17 +345,18 @@ sub unixpath {
 	for my $line (@_) {
 	    my $nl = chomp $line;
 	    $line =~ s%\r$%%;
-	    $line =~ s%'%\\'%g;
-	    my @bit = Text::ParseWords::parse_line('\s+', 'delimiters', $line);
+	    my @chars = split//,$line;
+	    my $odd = (((grep/'/,@chars) % 2) || ((grep/"/,@chars) % 2));
+	    my @bit = $odd? split/(\s+)/,$line
+	      : Text::ParseWords::parse_line('\s+', 'delimiters', $line);
 	    map {
-	        s%\\'%'%g;
 	        s%\\%/%g if m%(?:^(?:\..*|"|[A-Za-z]:|\w*)|\@)\\%;
 		if (m%\A([A-Za-z]):(.*)\Z%) {
 		  $_ = "/cygdrive/" . lc($1) . $2;
 		} else {
 		  s%^//view%/view%;
 		}
-	    } grep { $_ and m%\S% } @bit;
+	    } grep { $_ && m%\S% } @bit;
 	    $line = join '', grep {$_} @bit;
 	    $line .= "\n" if $nl;
 	}
@@ -379,7 +380,7 @@ sub ctcmd {
     my $level = shift;
     $level = 2 if !defined($level) && !defined(wantarray);
     if ($level) {
-        if ($self->ipc and !CYGWIN) {
+        if ($self->ipc && !CYGWIN) {
 	    $self->ipc(0);	# shut the ipc down
 	}
 	eval { require ClearCase::CtCmd };
@@ -530,8 +531,8 @@ sub ipc {
     if ($self->ctcmd) {
 	$self->ctcmd(0);	# shut down the CtCmd connection
     }
-    if (exists($class->{IPC}) and $level =~ m%^\d+$%) {
-        if (($self ne $class) and !$self->ipc) {
+    if (exists($class->{IPC}) && $level =~ m%^\d+$%) {
+        if (($self ne $class) && !$self->ipc) {
 	    ++$pidcount{$class->{IPC}->{PID}};
 	    $self->{IPC}->{PID}  = $class->{IPC}->{PID};
 	    $self->{IPC}->{DOWN} = $class->{IPC}->{DOWN};
@@ -570,32 +571,39 @@ sub ipc {
     return $self;
 }
 
-sub _cvt_input_cw {
-    my $self = shift;
+sub _cw_map {
     map {
         s%^/cygdrive/([A-Za-z])%$1:%;
 	if (m%^/[^/]%) {
-	    if (-r $_) {
+	    if (!s%^/view%//view% && -r $_) {
 	        $_ = "${cygpfx}$_";
 	    } else {
-		s%^/view%//view% or s%^/%\\%; # case of vob tags
+	        s%^/%\\%; # case of vob tags
 	    }
 	}
-    } @{$self->{AV_ARGS}};
+    } @_;
+}
+
+sub _cvt_input_cw {
+    my $self = shift;
+    _cw_map @{$self->{AV_ARGS}};
+    for my $o (values %{$self->{AV_OPTS}}) {
+        _cw_map grep{$_}@{$o};
+    }
 }
 
 sub _ipc_cmd {
     my $self = shift;
     my ($disposition, $stdout, $stderr, @cmd) = @_;
 
-    # Handle verbosity.
-    my $dbg = $self->dbglevel;
-    $self->_dbg($dbg, '=>', \*STDERR, @cmd) if $dbg;
-
     # Send the command to cleartool.
     my $cmd = join(' ', map {
-        m%\s|[\[\]*"']% ? (m%'% ? (m%"% ? $_ : qq("$_")) : qq('$_')) : $_
+        m%\s|[\[\]*"'?]% ? (m%'% ? (m%"% ? $_ : qq("$_")) : qq('$_')) : $_
     } @cmd);
+    # Handle verbosity.
+    my $dbg = $self->dbglevel;
+    $self->_dbg($dbg, '=>', \*STDERR, $cmd) if $dbg;
+
     chomp $cmd;
     my $down = $self->{IPC}->{DOWN};
     print $down $cmd, "\n";
@@ -606,21 +614,22 @@ sub _ipc_cmd {
 	print $down $input, "\n.\n";
 	delete $self->{IPC}->{COMMENT};
     }
-
+    my $man = ($self->{AV_PROG}->[1] eq 'man'); #Special case: errors ok
+    my $manok; #Some man output already: no complete failure
     # Read back the results and get command status.
     my $rc = 0;
     my $back = $self->{IPC}->{BACK};
     while($_ = <$back>) {
         my ($last, $next, $err);
 	my $out = *STDOUT;
-	if (m%^cleartool: (Error|Warning):%) {
+	if (!$manok && m%^cleartool: (Error|Warning):%) {
 	    if ($stderr) {
 	        $out = *STDERR;
 	        $err = 1;
 	    } else {
 	        $next = 1;
 	    }
-	} elsif (m%^Comments for %) {
+	} elsif (!$man && m%^Comments for %) {
 	  if ($disposition) {
 	    push(@$disposition, $_);
 	  } else {
@@ -637,12 +646,14 @@ sub _ipc_cmd {
 	    $rc = $2 << 8;
 	    chomp;
 	    $_ ? $last = 1 : last;
+	} elsif (!$manok && $man) {
+	    $manok = 1;
 	}
 	print '+ <=', $_ if $_ && $dbg >= 2;
 	next if $next;
 	$self->unixpath($_) if CYGWIN;
-	if ($stdout or ($err and $stderr)) {
-	    if ($disposition and (($err and $stderr == 1) or (!$err and $stdout == 1))) {
+	if ($stdout || ($err && $stderr)) {
+	    if ($disposition && (($err && $stderr == 1) || (!$err && $stdout == 1))) {
 	        push(@$disposition, $_);
 	    } else {
 	        print $out $_;
