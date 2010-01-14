@@ -1,9 +1,10 @@
 # -*- cperl -*-
 use strict;
 use Benchmark;
+use Cwd;
 exit 0 unless $^O eq 'cygwin';
 
-use Test::More tests => 8;
+use Test::More tests => 11;
 select(STDERR); $| = 1; select(STDOUT); $| = 1;
 use ClearCase::Argv qw(chdir);
 use File::Temp qw(tempfile);
@@ -63,6 +64,21 @@ $ct->unixpath($out);
 chomp $out;
 ok $out eq q(<  if ($ele =~ /\.demo"/i) {),
   'Preserved string with one double quote';
+#9
+$out = q(> 	ccfiles="$(CCFILES)";\\); #from diff
+$ct->unixpath($out);
+chomp $out;
+ok $out eq q(> 	ccfiles="$(CCFILES)";\\),
+  'Preserved string ending in backslash';
+#10
+my @args = qw(-out /tmp/cw -nc foo);
+$ct->_cw_map(@args);
+ok $args[1] =~ "^$cygpfx",
+  'Converted -out input argument: non-existing path outside vobs';
+#11
+my $vdir = cwd;
+$out = $ct->argv(qw(des -s), "vob:$vdir")->stderr(0)->qx;
+ok $out, 'Converted in-vob full path';
 
 print STDERR "\n", ClearCase::Argv->summary;   # print out the stats we kept
 # only for ClearCase commands! None used so far in this test...

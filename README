@@ -84,6 +84,14 @@ The new support concerns the conversion of paths between Windows
 and Cygwin syntaxes, as well as the standardization of end-of-lines
 conventions.  It is particularly useful under a ClearCase::Wrapper.
 
+On Windows, cleartool uses, for interactive functions, devices which
+are not supported on cygwin terminals. Interactive behaviours will
+thus appear to 'hang', and should therefore be avoided. Wrappers may
+work around most, but not all, cases.
+
+Cygwin support implies a post-processing of cleartool output. Over
+I<exec>, this is only supported in the I<ipc> mode.
+
 =back
 
 =head1 CHRONOLOGY

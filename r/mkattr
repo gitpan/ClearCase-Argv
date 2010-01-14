@@ -10,9 +10,10 @@ use Benchmark;
 #
 # This test case does not test the presence of triggers.
 
-use Test::More tests => 1;
+use Test::More tests => 2;
 select(STDERR); $| = 1; select(STDOUT); $| = 1;
 use ClearCase::Argv qw(chdir);
+use Argv 1.25;
 
 ClearCase::Argv->summary;      # start keeping stats
 ClearCase::Argv->ipc(1);
@@ -28,7 +29,11 @@ my $attype = @attype? $attype[$#attype] . 'Z' : 'FOO';
 $silent->argv(qw(mkattype -nc), $attype)->system and die "Aborted: $!\n";
 my $value = q("foo");
 ok(!$silent->argv('mkattr', $attype, $value, '.')->system,
-   "String attribute set to $value\n");
+   "String attribute set to $value (ipc mode)");
+$silent->ipc(0);
+$value = q("bar");
+ok(!$silent->argv(qw(mkattr -rep), $attype, $value, '.')->system,
+   "String attribute set to $value (fork mode)");
 $silent->argv(qw(rmtype -f -rmall), "attype:$attype")->system;
 
 print STDERR "\n", ClearCase::Argv->summary;   # print out the stats we kept

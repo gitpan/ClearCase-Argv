@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.46';
+$VERSION = '1.47';
 
 use Argv 1.23;
 
@@ -101,7 +101,6 @@ sub prog {
 sub exec {
     $class->new(@_)->exec if !ref($_[0]) || ref($_[0]) eq 'HASH';
     my $self = shift;
-    $self->ipc(1) if CYGWIN;
     if ($self->ctcmd) {
 	exit $self->system(@_) >> 8;
     } elsif ($self->ipc) {
@@ -125,7 +124,7 @@ sub system {
 	    my @ret = $self->SUPER::qv(@rargs);
 	    $self->unixpath(@ret);
 	    print join("", @ret), "\n" if @ret;
-	    return;
+	    return $?;
 	} else {
 	    return $self->SUPER::system(@rargs);
 	}
@@ -344,6 +343,7 @@ sub unixpath {
         no strict 'subs';
 	for my $line (@_) {
 	    my $nl = chomp $line;
+	    my $bs = $line =~ s/\\$//;
 	    $line =~ s%\r$%%;
 	    my @chars = split//,$line;
 	    my $odd = (((grep/'/,@chars) % 2) || ((grep/"/,@chars) % 2));
@@ -358,6 +358,7 @@ sub unixpath {
 		}
 	    } grep { $_ && m%\S% } @bit;
 	    $line = join '', grep {$_} @bit;
+	    $line .= '\\' if $bs;
 	    $line .= "\n" if $nl;
 	}
     } else {
@@ -572,16 +573,20 @@ sub ipc {
 }
 
 sub _cw_map {
-    map {
-        s%^/cygdrive/([A-Za-z])%$1:%;
+    use File::Basename;
+    no warnings;
+    for (@_) {
+        next if s%^(vob:)?/cygdrive/([A-Za-z])%$1$2:%;
+	next if s%^(vob:)?/view%$1//view%;
 	if (m%^/[^/]%) {
-	    if (!s%^/view%//view% && -r $_) {
-	        $_ = "${cygpfx}$_";
-	    } else {
+	    my $p = dirname $_;
+	    if ($p eq '/') {
 	        s%^/%\\%; # case of vob tags
+	    } elsif (-r $p) {
+	        $_ = "${cygpfx}$_";
 	    }
 	}
-    } @_;
+    }
 }
 
 sub _cvt_input_cw {
@@ -598,7 +603,7 @@ sub _ipc_cmd {
 
     # Send the command to cleartool.
     my $cmd = join(' ', map {
-        m%\s|[\[\]*"'?]% ? (m%'% ? (m%"% ? $_ : qq("$_")) : qq('$_')) : $_
+        m%^$|\s|[\[\]*"'?]% ? (m%'% ? (m%"% ? $_ : qq("$_")) : qq('$_')) : $_
     } @cmd);
     # Handle verbosity.
     my $dbg = $self->dbglevel;
@@ -615,6 +620,7 @@ sub _ipc_cmd {
 	delete $self->{IPC}->{COMMENT};
     }
     my $man = ($self->{AV_PROG}->[1] eq 'man'); #Special case: errors ok
+    my $diff = ($self->{AV_PROG}->[1] eq 'diff');
     my $manok; #Some man output already: no complete failure
     # Read back the results and get command status.
     my $rc = 0;
@@ -642,14 +648,14 @@ sub _ipc_cmd {
 	        last if m%^\.$%;
 	    }
 	} elsif (s%^(.*)Command \d+ returned status (\d+)%$1%) {
-	    # Shift the status up so it looks like an exit status.
-	    $rc = $2 << 8;
+	    $rc = $2 unless $rc;
 	    chomp;
 	    $_ ? $last = 1 : last;
 	} elsif (!$manok && $man) {
 	    $manok = 1;
 	}
 	print '+ <=', $_ if $_ && $dbg >= 2;
+	$rc = 1 if $diff && !m%^Files are identical%;
 	next if $next;
 	$self->unixpath($_) if CYGWIN;
 	if ($stdout || ($err && $stderr)) {
@@ -729,8 +735,7 @@ sub quote {
     my $inpathnorm = $self->inpathnorm;
     for (@_) {
 	if (CYGWIN) {
-	    s%^/cygdrive/([a-za-z])%$1:%;
-	    s%^/%$cygpfx/%;
+	    s%^/cygdrive/([a-zA-Z])%$1:% || s%^/%$cygpfx/%;
 	}
 	# If requested, change / for \ in Windows file paths.
 	s%/%\\%g if $inpathnorm;
