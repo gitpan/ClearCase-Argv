@@ -338,6 +338,9 @@ Revision history for Perl extension ClearCase::Argv.
 	- cygwin/exec: ipc mode not forced anymore
 	- ALL CHANGES FROM 1.41 THROUGH HERE CONTRIBUTED BY Marc Girod.
 
+1.48 Sun Feb 21 16:26:59 GMT 2010
+        - _ipc_cmd: localize $_ to avoid modifying it in the caller context
+
 BACKWARD COMPATIBILITY NOTES:
 
 A case was reported in which changes in 1.44 broke backward

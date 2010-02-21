@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.47';
+$VERSION = '1.48';
 
 use Argv 1.23;
 
@@ -600,7 +600,7 @@ sub _cvt_input_cw {
 sub _ipc_cmd {
     my $self = shift;
     my ($disposition, $stdout, $stderr, @cmd) = @_;
-
+    local *_;
     # Send the command to cleartool.
     my $cmd = join(' ', map {
         m%^$|\s|[\[\]*"'?]% ? (m%'% ? (m%"% ? $_ : qq("$_")) : qq('$_')) : $_
