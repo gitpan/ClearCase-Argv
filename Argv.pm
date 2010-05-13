@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.48';
+$VERSION = '1.49';
 
 use Argv 1.23;
 
@@ -123,7 +123,7 @@ sub system {
         if (CYGWIN) {
 	    my @ret = $self->SUPER::qv(@rargs);
 	    $self->unixpath(@ret);
-	    print join("", @ret), "\n" if @ret;
+	    print join("", @ret) if @ret;
 	    return $?;
 	} else {
 	    return $self->SUPER::system(@rargs);
@@ -350,7 +350,7 @@ sub unixpath {
 	    my @bit = $odd? split/(\s+)/,$line
 	      : Text::ParseWords::parse_line('\s+', 'delimiters', $line);
 	    map {
-	        s%\\%/%g if m%(?:^(?:\..*|"|[A-Za-z]:|\w*)|\@)\\%;
+	        s%\\%/%g if m%(?:^(?:\..*|"|[A-Za-z]:|vob:|\w*)|\@)\\%;
 		if (m%\A([A-Za-z]):(.*)\Z%) {
 		  $_ = "/cygdrive/" . lc($1) . $2;
 		} else {
@@ -597,14 +597,55 @@ sub _cvt_input_cw {
     }
 }
 
+sub _qmeta {
+    my $arg = shift;
+    if (CYGWIN || MSWIN) {
+        $arg =~ s%\'%^'%g;
+        $arg = q(') . $arg . q(');
+    } else {
+      $arg = quotemeta($arg);
+    }
+    return $arg;
+}
+
+# commands sent to ipc must be single line ones
+sub _ipc_nl_in_cmt {
+    my $r = shift;
+    my ($i, $c, $v) = 0;
+    for (@{$r}) {
+        if (m%^-c(omment)?$%) {
+	    $c = $i;
+	} elsif (m%^-(nc|c[fq])%) {
+	    last;
+	} elsif ($c and $i == $c + 1) {
+	    $v = $_ if m%\n%;
+	    last;
+	}
+	$i++;
+    }
+    if ($v) {
+        use File::Temp qw(tempfile);
+        my ($fh,$cfile) = tempfile;
+	print $fh $v;
+	close $fh;
+	splice @{$r} ,$c ,2 , ('-cfile', $cfile);
+    }
+}
+
 sub _ipc_cmd {
     my $self = shift;
     my ($disposition, $stdout, $stderr, @cmd) = @_;
     local *_;
+    _ipc_nl_in_cmt(\@cmd);
     # Send the command to cleartool.
     my $cmd = join(' ', map {
-        m%^$|\s|[\[\]*"'?]% ? (m%'% ? (m%"% ? $_ : qq("$_")) : qq('$_')) : $_
-    } @cmd);
+        m%^$|\s|[\[\]*"'?]% ?
+	  (m%'% ?
+	     (m%"% ?
+		_qmeta($_) : qq("$_"))
+	       : qq('$_'))
+	    : $_
+    } grep {defined} @cmd);
     # Handle verbosity.
     my $dbg = $self->dbglevel;
     $self->_dbg($dbg, '=>', \*STDERR, $cmd) if $dbg;
@@ -1109,7 +1150,7 @@ reports or patches gratefully accepted.
 Commands using a format option defining a multi-line output fail in
 many cases in fork mode, because of the underlying Argv module.
 
-ClearCase::Argv will use IPC::ChildSafe if it finds it, which may 
+ClearCase::Argv will use IPC::ChildSafe if it finds it, which may
 introduce differences of behavior with the newer code to replace it.
 It should probably just drop it, unless explicitly driven to use it.
 
@@ -1148,10 +1189,10 @@ versions. It's currently maintained on Solaris 9 and Windows XP with CC
 7.0 using Perl5.8.x.  Viability on other platforms and/or earlier
 versions is untestable by me.
 
-Marc Girod's testing environment: Solaris 8 and 10, and Windows 2000,
-with CtCmd on Windows, without IPC::ChildSafe, with Clone.
-Tatyana Shpichko's testing environment: RedHat Linux 4, with and without
-CtCmd, and Windows XP without CtCmd.
+Marc Girod's testing environment: Solaris 10 (sparc and i386), and
+Windows Vista, with CtCmd on Windows, without IPC::ChildSafe, with
+Clone. Perl 5.8.8 and 5.10.x. Tatyana Shpichko's testing environment:
+RedHat Linux 4, with and without CtCmd, and Windows XP without CtCmd.
 
 =head1 FILES
 

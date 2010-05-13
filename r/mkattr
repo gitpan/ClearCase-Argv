@@ -10,7 +10,7 @@ use Benchmark;
 #
 # This test case does not test the presence of triggers.
 
-use Test::More tests => 2;
+use Test::More tests => 8;
 select(STDERR); $| = 1; select(STDOUT); $| = 1;
 use ClearCase::Argv qw(chdir);
 use Argv 1.25;
@@ -27,13 +27,26 @@ die "This test needs to be run in a view, in a vob\n"
 my @attype = sort $ct->argv(qw(lstype -kind attype -s -obs))->qx;
 my $attype = @attype? $attype[$#attype] . 'Z' : 'FOO';
 $silent->argv(qw(mkattype -nc), $attype)->system and die "Aborted: $!\n";
-my $value = q("foo");
-ok(!$silent->argv('mkattr', $attype, $value, '.')->system,
-   "String attribute set to $value (ipc mode)");
-$silent->ipc(0);
-$value = q("bar");
-ok(!$silent->argv(qw(mkattr -rep), $attype, $value, '.')->system,
-   "String attribute set to $value (fork mode)");
+sub one_pass {
+  my $ipc = shift;
+  my $mode = $ipc? 'ipc' : 'fork';
+  $silent->ipc($ipc);
+  my $value = q("foo");
+  ok(!$silent->argv(qw(mkattr -rep), $attype, $value, '.')->system,
+     "String attribute set to $value ($mode mode)");
+  $value = q("O'Toole");
+  ok(!$silent->argv(qw(mkattr -rep), $attype, $value, '.')->system,
+     "String attribute set to $value ($mode mode)");
+  $value = q("*test*");
+  ok(!$silent->argv(qw(mkattr -rep), $attype, $value, '.')->system,
+     "String attribute set to $value ($mode mode)");
+  $value = q("Line one\nLine two");
+  ok(!$silent->argv(qw(mkattr -rep), $attype, $value, '.')->system,
+     "String attribute set to $value ($mode mode)");
+}
+one_pass(0);
+one_pass(1);
+
 $silent->argv(qw(rmtype -f -rmall), "attype:$attype")->system;
 
 print STDERR "\n", ClearCase::Argv->summary;   # print out the stats we kept

@@ -9,8 +9,10 @@
 
 <body style="background-color: white">
 
-<p><a name="__index__"></a></p>
+
 <!-- INDEX BEGIN -->
+<div name="index">
+<p><a name="__index__"></a></p>
 
 <ul>
 
@@ -28,14 +30,16 @@
 	<li><a href="#grand_unification">GRAND UNIFICATION</a></li>
 	<li><a href="#testing">TESTING</a></li>
 </ul>
+
+<hr name="index" />
+</div>
 <!-- INDEX END -->
 
-<hr />
 <p>
 </p>
 <h1><a name="important_note">IMPORTANT NOTE</a></h1>
-<p>THIS module is called ``ClearCase::Argv''. There is a DIFFERENT module
-called simply ``Argv''. ClearCase::Argv depends on (requires) Argv. More
+<p>THIS module is called &quot;ClearCase::Argv&quot;. There is a DIFFERENT module
+called simply &quot;Argv&quot;. ClearCase::Argv depends on (requires) Argv. More
 precisely, ClearCase::Argv is a subclass of Argv. Therefore, you must
 download and install BOTH in order for ClearCase::Argv to work.  This
 naming has confused quite a few people so I highlight it here.</p>
@@ -44,7 +48,7 @@ naming has confused quite a few people so I highlight it here.</p>
 <hr />
 <h1><a name="readme">README</a></h1>
 <p>Though ClearCase::Argv is itself pretty small, it represents the
-<em>``Grand Unification''</em> of some of my other ClearCase-related modules.
+<em>&quot;Grand Unification&quot;</em> of some of my other ClearCase-related modules.
 The module itself is fully documented in the standard POD format; this
 file is an accompanying overview and chronology.</p>
 <p>
@@ -52,7 +56,7 @@ file is an accompanying overview and chronology.</p>
 <hr />
 <h1><a name="summary_of_features">SUMMARY OF FEATURES</a></h1>
 <ul>
-<li><strong><a name="item_interoperability_2fportability">Interoperability/Portability</a></strong>
+<li><strong><a name="interoperability_portability" class="item">Interoperability/Portability</a></strong>
 
 <p>Using <strong>ClearCase::Argv</strong> can enhance portability of scripts between
 UNIX and Windows by providing versions of <em>system</em>, <em>exec</em>, and <em>qx</em>
@@ -62,7 +66,7 @@ protect them from the <code>cmd.exe</code> shell, automatically converting
 /-separated pathnames to \, etc. These features can keep a lot of hair
 out of your script (and on your head).</p>
 </li>
-<li><strong><a name="item_optional_co_2dprocess_for_speed">Optional Co-Process for Speed</a></strong>
+<li><strong><a name="optional_co_process_for_speed" class="item">Optional Co-Process for Speed</a></strong>
 
 <p>For any script which uses ClearCase::Argv, the 'ipc' class method</p>
 <pre>
@@ -72,12 +76,12 @@ subsequent system/exec/qx commands to it instead of forking a new child
 process each time. This can speed up scripts by anywhere between 1
 (i.e. not at all) and 10 times by my measurements.</p>
 </li>
-<li><strong><a name="item_ctcmd_interface_for_speed">CtCmd Interface for Speed</a></strong>
+<li><strong><a name="ctcmd_interface_for_speed" class="item">CtCmd Interface for Speed</a></strong>
 
 <p>As an alternative to IPC mode, ClearCase::Argv can also be told to
 process commands via <strong>ClearCase::CtCmd</strong>.</p>
 </li>
-<li><strong><a name="item_convenience_features">Convenience Features</a></strong>
+<li><strong><a name="convenience_features" class="item">Convenience Features</a></strong>
 
 <p>Many convenience features are provided by the replacement
 system/exec/qx functions. These include:</p>
@@ -88,7 +92,7 @@ system/exec/qx functions. These include:</p>
     4. 'xargs' mode (breaks up long cmd lines to avoid system limits)</pre>
 <p>plus a few more.</p>
 </li>
-<li><strong><a name="item_no_major_investment">No Major Investment</a></strong>
+<li><strong><a name="no_major_investment" class="item">No Major Investment</a></strong>
 
 <p>It's easy to convert an existing script to use ClearCase::Argv or
 back.  Just add a 'use ClearCase::Argv' line and change all instances
@@ -100,13 +104,13 @@ a line like:</p>
         sub qv { qx(@_) }</pre>
 <p>And remove the 'use ClearCase::Argv' line of course.</p>
 </li>
-<li><strong><a name="item_option_processing">Option Processing</a></strong>
+<li><strong><a name="option_processing" class="item">Option Processing</a></strong>
 
 <p>There's a great deal of option-processing power inherited from the
 base class, much more in fact than most users will care about. Look
 in the PODs for more.</p>
 </li>
-<li><strong><a name="item_cygwin_support">Cygwin Support</a></strong>
+<li><strong><a name="cygwin_support" class="item">Cygwin Support</a></strong>
 
 <p>Version 1.43 introduces experimental support for Cygwin on Windows
 platforms. This is meant to be installed on the Cygwin perl, and
@@ -138,7 +142,7 @@ few paradigmatic flaws:</p>
 <ul>
 <li>
 <p>It didn't work on Windows, where there's no such thing as a fork or
-a true ``child'' process.</p>
+a true &quot;child&quot; process.</p>
 </li>
 <li>
 <p>The interface was/is strange and a little clunky. Not too surprising
@@ -154,7 +158,7 @@ required a substantial commitment of time, and using it at all meant a
 substantial commitment of faith.</p>
 </li>
 </ul>
-<p>I was able to ``port'' <code>IPC::ClearTool</code> to Windows by calling in to the
+<p>I was able to &quot;port&quot; <code>IPC::ClearTool</code> to Windows by calling in to the
 ClearCase Automation Library (CAL), a COM interface first available in
 ClearCase 4.0.  But the other issues remained, until ...</p>
 <p>
@@ -168,7 +172,7 @@ here?). In particular it was necessary to do lots of shifting,
 grepping, splicing, and quoting of @ARGV, leading to terribly
 spaghetti-like code in places, especially when you throw in the need
 for UNIX/Windows portability and different shell-quoting rules. So
-extensions written to the <strong>ClearCase::Ct</strong> ``API'' tended to resemble a
+extensions written to the <strong>ClearCase::Ct</strong> &quot;API&quot; tended to resemble a
 nest of ifdefs.</p>
 <p>So I set out to rewrite <code>ClearCase::Ct</code>. The first step was to write a
 support module (eventually called <strong>Argv</strong>) to hide all the @ARGV
@@ -203,7 +207,7 @@ new module is called <strong>ClearCase::Wrapper</strong>.</p>
 <p>Note that <strong>Argv</strong> itself has nothing to do with ClearCase. So I made a
 little subclass of <strong>Argv</strong> to tune it for use with <strong>cleartool</strong>, since I
 write a lot of Perl/ClearCase code.  Originally, <strong>ClearCase::Argv</strong>
-simply extended <strong>Argv</strong> to prepend the word ``cleartool'' to all arg
+simply extended <strong>Argv</strong> to prepend the word &quot;cleartool&quot; to all arg
 vectors. Thus, while</p>
 <pre>
     Argv-&gt;new('ls', -l');</pre>
@@ -211,7 +215,7 @@ vectors. Thus, while</p>
 <pre>
     ClearCase::Argv-&gt;new('ls', -l')-&gt;system;</pre>
 <p>would run <code>&quot;cleartool ls -l&quot;</code>, and it understands that the 'program' part
-of the command line is ``cleartool ci'' (or more properly qw(cleartool ci)).</p>
+of the command line is &quot;cleartool ci&quot; (or more properly qw(cleartool ci)).</p>
 <p>The <em>functional interface</em> of <em>Argv</em> is exposed through
 <strong>ClearCase::Argv</strong>, and it's also extended to support methods called
 <strong>ctsystem(), ctexec(), and ctqx()</strong> which automatically prepend
