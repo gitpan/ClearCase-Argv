@@ -46,4 +46,12 @@ if ($view2) {
     "Failed to find a second, dynamic, view, needed for this test\n";
 }
 
+# Regression test: no extra newline returned by setview
+$obj1->stderr(1);
+my $ret = $obj1->setview($view2)->qx;
+my $v2 = $obj1->pwv(['-s'])->qx;
+my $rc = ($ret =~ /^$/m)? 1 : 0;
+$rc++ unless $v2 eq $view2;
+
 print STDERR ClearCase::Argv->summary;	# print out the stats we kept
+exit $rc;

@@ -347,6 +347,11 @@ Revision history for Perl extension ClearCase::Argv.
 	- ipc: support for multiline comments; added test case
 	- ALL CHANGES FROM 1.41 THROUGH HERE CONTRIBUTED BY Marc Girod.
 
+1.50 Sat Dec 18 14:49:48 GMT 2010
+        - cygwin: converted backslashes in output more aggressively
+	- ctcmd: 2 dbg outputs to stderr (Stephen Rauch)
+	- setview: fix bug reported by Dirk Heinrichs, and other glitches
+
 BACKWARD COMPATIBILITY NOTES:
 
 A case was reported in which changes in 1.44 broke backward

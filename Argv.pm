@@ -1,10 +1,10 @@
 package ClearCase::Argv;
 
-$VERSION = '1.49';
+$VERSION = '1.50';
 
-use Argv 1.23;
+use Argv 1.26;
 
-use constant MSWIN	=> $^O =~ /MSWin32|Windows_NT/i ? 1 : 0;
+use constant MSWIN	=> $^O =~ /MSWin|Windows_NT/i ? 1 : 0;
 use constant CYGWIN	=> $^O =~ /cygwin/i ? 1 : 0;
 
 my $NUL = MSWIN ? 'NUL' : '/dev/null';
@@ -186,7 +186,14 @@ sub system {
 		return $self->stderr($efd)->SUPER::system;
 	    }
 	    $self->ipc(0);
-	    return $self->ipc($cmd[1], $efd);
+	    my @data;
+	    $self->ipc($cmd[1], \@data);
+	    if ($efd == 2) {
+	        print STDERR @data;
+	    } elsif ($efd == 1) {
+		print STDOUT @data;
+	    }
+	    return scalar @data;
 	}
         $rc = $self->_ipc_cmd(undef, $ofd, $efd, @cmd);
     }
@@ -261,7 +268,7 @@ sub qx {
 		for (@data) { $_ .= "\n" }
 	    }
 	    $self->unixpath(@data) if MSWIN && $self->outpathnorm;
-	    print map {"+ <- $_"} @data if @data && $dbg >= 2;
+	    print STDERR map {"+ <- $_"} @data if @data && $dbg >= 2;
 	    if ($rc) {
 		$self->lastresults($rc, @data);
 		$self->fail($self->qxfail);
@@ -271,7 +278,7 @@ sub qx {
 	} else {
 	    chomp($data) if $self->autochomp;
 	    $self->unixpath($data) if MSWIN && $self->outpathnorm;
-	    print "+ <- $data" if $data && $dbg >= 2;
+	    print STDERR "+ <- $data" if $data && $dbg >= 2;
 	    if ($rc) {
 		$self->lastresults($rc, $data);
 		$self->fail($self->qxfail);
@@ -287,7 +294,14 @@ sub qx {
 		return wantarray? split(/\n/, $ret) : $ret;
 	    }
             $self->ipc(0);
-            return $self->ipc($cmd[1], $efd);
+            my @data;
+            $self->ipc($cmd[1], \@data);
+            if ($efd == 2) {
+                print STDERR @data;
+            } elsif ($efd == 1) {
+                return wantarray? @data : join '', @data;
+            }
+            return '';
         }
 	my @data = ();
 	$rc = $self->_ipc_cmd(\@data, $ofd, $efd, @cmd);
@@ -350,7 +364,7 @@ sub unixpath {
 	    my @bit = $odd? split/(\s+)/,$line
 	      : Text::ParseWords::parse_line('\s+', 'delimiters', $line);
 	    map {
-	        s%\\%/%g if m%(?:^(?:\..*|"|[A-Za-z]:|vob:|\w*)|\@)\\%;
+	        s%\\%/%g if m%(?:^(?:"|[A-Za-z]:|vob:|[\w/.-]*)|\@)\\%;
 		if (m%\A([A-Za-z]):(.*)\Z%) {
 		  $_ = "/cygdrive/" . lc($1) . $2;
 		} else {
@@ -513,7 +527,7 @@ sub ipc {
     my $self = shift;	# this might be an instance or a classname
     no strict 'refs';	# because $self may be a symbolic hash ref
     my $level = shift;
-    my $stderr = shift;
+    my $output = shift;
     if (defined($level) && !$level) {
 	return 0 unless exists($self->{IPC});
 	my $down = $self->{IPC}->{DOWN};
@@ -557,10 +571,9 @@ sub ipc {
 
     if ($view) {
       print $down "des -fmt '\\n' .\n";
-      my $out = ($stderr == 2) ? *STDERR : *STDOUT;
       while ($_ = <$back>) {
 	last if /^Command 1 returned status/;
-	print $out $_ if $stderr;
+	push @{$output}, $_ unless /^$/;
       }
     }
 
@@ -1163,7 +1176,7 @@ on Windows yet (where the output prior to the last change seemed ok...)
 
 Argv uses the first-found of three different modules for cloning, and
 Marc Girod suspects that only the first one (Clone, in recent versions)
-performs correctly with GLOB objects... Work-around in place.
+performs correctly with GLOB objects... work-around in place.
 
 The string 'cleartool' is hard-coded in many places, making it hard to
 implement additional support for multitool commands.
@@ -1181,6 +1194,16 @@ coprocess unconditionally, without Argv updating its ipc status, and the
 ipccount. This will affect any other users of the same coprocess.
 An other symptom of the problem is a 'broken pipe' error. Argv writes
 to the coprocess, but obviously fails to read anything coming back.
+
+Some multiline commands work in the fork mode, but not in the ipc one.
+
+E.g. S<C<< $ct->des(['-fmt', "%[owner]p\n"], 'vob:.')->system >>>
+
+This example is easily rewritten to work in both modes as either:
+
+    S<C<< $ct->des(['-fmt', '%[owner]p\n'], 'vob:.')->system >>>
+
+    S<C<< $ct->des([qw(-fmt %[owner]p\n)], 'vob:.')->system >>>
 
 =head1 PORTABILITY
 
