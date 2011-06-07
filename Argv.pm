@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.50';
+$VERSION = '1.51';
 
 use Argv 1.26;
 
@@ -18,12 +18,10 @@ my $NUL = MSWIN ? 'NUL' : '/dev/null';
 use strict;
 
 my $class = __PACKAGE__;
-my $cygpfx = '';
 if (CYGWIN) {
     require Text::ParseWords;
     $class->inpathnorm(1);
     $class->outpathnorm(1);
-    $cygpfx = (split/ +/,(`df /tmp`)[1])[0];
 }
 my %pidcount;
 END {
@@ -139,7 +137,7 @@ sub system {
     my @args = @{$self->{AV_ARGS}};
     my @cmd = (@prog, @opts, @args);
     my $dbg = $self->dbglevel;
-    $self->_addstats("cleartool @prog", scalar @args) if defined %Argv::Summary;
+    $self->_addstats("cleartool @prog", scalar @args) if %Argv::Summary;
     $self->warning("cannot close stdin of child process") if $ifd;
     if ($self->noexec && !$self->_read_only) {
 	$self->_dbg($dbg, '-', \*STDERR, @cmd);
@@ -231,7 +229,7 @@ sub qx {
     my @opts = $self->_sets2opts(@_);
     my @args = @{$self->{AV_ARGS}};
     my @cmd = (@prog, @opts, @args);
-    $self->_addstats("cleartool @prog", scalar @args) if defined %Argv::Summary;
+    $self->_addstats("cleartool @prog", scalar @args) if %Argv::Summary;
     $self->warning("cannot close stdin of child process") if $ifd;
     if ($self->noexec && !$self->_read_only) {
 	$self->_dbg($dbg, '-', \*STDERR, @cmd);
@@ -364,9 +362,9 @@ sub unixpath {
 	    my @bit = $odd? split/(\s+)/,$line
 	      : Text::ParseWords::parse_line('\s+', 'delimiters', $line);
 	    map {
-	        s%\\%/%g if m%(?:^(?:"|[A-Za-z]:|vob:|[\w/.-]*)|\@)\\%;
-		if (m%\A([A-Za-z]):(.*)\Z%) {
-		  $_ = "/cygdrive/" . lc($1) . $2;
+	        s%\\%/%g if m%(?:^(?:"|[\w/.-]*)|\@)\\%;
+		if (m%^(vob|[A-Za-z]):%) {
+		  $_ = Cygwin::win_to_posix_path($_);
 		} else {
 		  s%^//view%/view%;
 		}
@@ -593,10 +591,10 @@ sub _cw_map {
 	next if s%^(vob:)?/view%$1//view%;
 	if (m%^/[^/]%) {
 	    my $p = dirname $_;
-	    if ($p eq '/') {
+	    if ($p eq '/' && ! -r) {
 	        s%^/%\\%; # case of vob tags
 	    } elsif (-r $p) {
-	        $_ = "${cygpfx}$_";
+	        $_ = Cygwin::posix_to_win_path($_);
 	    }
 	}
     }
@@ -788,9 +786,7 @@ sub quote {
     # but cleartool gets them right so this quoting is simpler.
     my $inpathnorm = $self->inpathnorm;
     for (@_) {
-	if (CYGWIN) {
-	    s%^/cygdrive/([a-zA-Z])%$1:% || s%^/%$cygpfx/%;
-	}
+        $_ = Cygwin::posix_to_win_path($_) if CYGWIN && m%^/%;
 	# If requested, change / for \ in Windows file paths.
 	s%/%\\%g if $inpathnorm;
 	# Now quote embedded quotes ...
@@ -1192,7 +1188,7 @@ Cygwin preliminary support on Windows.
 The 'exit' cleartool command is dangerous in ipc mode: it will stop the
 coprocess unconditionally, without Argv updating its ipc status, and the
 ipccount. This will affect any other users of the same coprocess.
-An other symptom of the problem is a 'broken pipe' error. Argv writes
+Another symptom of the problem is a 'broken pipe' error. Argv writes
 to the coprocess, but obviously fails to read anything coming back.
 
 Some multiline commands work in the fork mode, but not in the ipc one.

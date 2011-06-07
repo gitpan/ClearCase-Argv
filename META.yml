@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               ClearCase-Argv
-version:            1.50
+version:            1.51
 abstract:           ~
 author:  []
 license:            unknown

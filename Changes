@@ -352,6 +352,10 @@ Revision history for Perl extension ClearCase::Argv.
 	- ctcmd: 2 dbg outputs to stderr (Stephen Rauch)
 	- setview: fix bug reported by Dirk Heinrichs, and other glitches
 
+1.51 Tue Apr 12 14:46:48 GMTDT 2011
+	- defined(%hash) deprecated in Perl 5.12
+	- cygwin: use perlcygwin API to convert paths (e.g. /usr/lib is c:\cygwin\lib)
+
 BACKWARD COMPATIBILITY NOTES:
 
 A case was reported in which changes in 1.44 broke backward
