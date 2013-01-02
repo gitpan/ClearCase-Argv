@@ -1,6 +1,6 @@
 package ClearCase::Argv;
 
-$VERSION = '1.51';
+$VERSION = '1.52';
 
 use Argv 1.26;
 
@@ -72,12 +72,36 @@ if (!MSWIN && ($< == 0 || $< != $>  || !grep{$_}@ENV{qw(PATH ATRIAHOME)})) {
 
 # Class method to get/set the location of 'cleartool'.
 sub cleartool_path {
-    shift;
-    @ct = @_ if @_;
-    return wantarray ? @ct : $ct[0];
+    my $self = shift;
+    if (ref $self and $self->{CT}) {
+	$self->ct(@_) if @_;
+	return @{$self->ct};
+    } else {
+	@ct = @_ if @_;
+	return @ct;
+    }
 }
-*find_cleartool = \&cleartool_path;  # backward compatibility 
+*find_cleartool = \&cleartool_path;  # backward compatibility
 
+sub ct {
+    my $self = shift;
+    if (ref $self) {
+	if (@_) {
+	    if ($self->ipc) {
+		$self->ipc(0);
+		$self->{CT} = ref($_[0])? $_[0] : [@_];
+		$self->ipc(1);
+	    } else {
+		$self->{CT} = ref($_[0])? $_[0] : [@_];
+	    }
+	    return defined(wantarray)? $self : undef;
+	} else {
+	    return $self->{CT}? @{$self->{CT}} : @ct;
+	}
+    } else {
+	return cleartool_path;
+    }
+}
 # Override of base-class method to change a prog value of 'foo' into
 # qw(cleartool foo). If the value is already an array or array ref
 # leave it alone. Same thing if the 1st word contains /cleartool/
@@ -86,11 +110,12 @@ sub prog {
     my $self = shift;
     return $self->SUPER::prog unless @_;
     my $prg = shift;
-    if (@_ || ref($prg) || $prg =~ m%^/|^\S*cleartool% || $self->ctcmd) {
+    if (@_ || ref($prg) || $prg =~ m%^/|^\S*(?:clear|multi)tool%
+	                                                    || $self->ctcmd) {
 	return $self->SUPER::prog($prg, @_);
     } else {
 	require Text::ParseWords;
-	return $self->SUPER::prog([@ct,
+	return $self->SUPER::prog([$self->ct,
 	    Text::ParseWords::parse_line('\s+', 1, $prg)], @_);
     }
 }
@@ -132,7 +157,7 @@ sub system {
     my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
     $self->args($self->glob) if $self->autoglob;
     my @prog = @{$self->{AV_PROG}};
-    shift(@prog) if $prog[0] =~ m%cleartool%;
+    shift(@prog) while grep m%(?:clear|multi)tool%, @prog;
     my @opts = $self->_sets2opts(@_);
     my @args = @{$self->{AV_ARGS}};
     my @cmd = (@prog, @opts, @args);
@@ -186,12 +211,17 @@ sub system {
 	    $self->ipc(0);
 	    my @data;
 	    $self->ipc($cmd[1], \@data);
-	    if ($efd == 2) {
-	        print STDERR @data;
-	    } elsif ($efd == 1) {
-		print STDOUT @data;
+	    if (@data) {
+		if ($efd == 2) {
+		    print STDERR @data;
+		} elsif ($efd == 1) {
+		    print STDOUT @data;
+		}
+		delete $self->{IPC}; #destructor would send 'exit' to defunct
+		return scalar @data;
+	    } else {
+	        return 0;
 	    }
-	    return scalar @data;
 	}
         $rc = $self->_ipc_cmd(undef, $ofd, $efd, @cmd);
     }
@@ -225,7 +255,7 @@ sub qx {
     my($ifd, $ofd, $efd) = ($self->stdin, $self->stdout, $self->stderr);
     $self->args($self->glob) if $self->autoglob;
     my @prog = @{$self->{AV_PROG}};
-    shift(@prog) if $prog[0] =~ m%cleartool%;
+    shift(@prog) while grep m%(?:clear|multi)tool%, @prog;
     my @opts = $self->_sets2opts(@_);
     my @args = @{$self->{AV_ARGS}};
     my @cmd = (@prog, @opts, @args);
@@ -340,8 +370,16 @@ sub pipe {
     }
     if ($mode) {
 	my $otherSelf = $self->clone();
-	$self->warning("$mode usage incompatible with pipe - temporarily reverting to plain cleartool") if $self->dbglevel;
-	($mode eq 'CtCmd') ? $otherSelf->ctcmd(0) : $otherSelf->ipc(0);
+	$self->warning("$mode usage incompatible with pipe - temporarily" .
+			 " reverting to plain cleartool") if $self->dbglevel;
+	if ($mode eq 'CtCmd') {
+	    $otherSelf->ctcmd(0);
+	    my @prg = $otherSelf->prog; #Depends on the exact invocation path
+	    $otherSelf->prog($self->ct, @prg)
+	                             unless grep m%(?:clear|multi)tool%, @prg;
+	} else {
+	    $otherSelf->ipc(0);
+	}
 	return $otherSelf->SUPER::pipe(@_);
     } else {
 	return $self->SUPER::pipe(@_);
@@ -369,7 +407,7 @@ sub unixpath {
 		  s%^//view%/view%;
 		}
 	    } grep { $_ && m%\S% } @bit;
-	    $line = join '', grep {$_} @bit;
+	    $line = join '', grep {defined($_)} @bit;
 	    $line .= '\\' if $bs;
 	    $line .= "\n" if $nl;
 	}
@@ -560,8 +598,8 @@ sub ipc {
     # Dies on failure.
     my($down, $back);
     my $view = ($level =~ /^\d+$/) ? '' : $level;
-    my @cmd = !$view ? (@ct, '-status')
-      : (@ct, qw(setview -exec), q(cleartool -status), $view);
+    my @cmd = !$view ? ($self->ct, '-status')
+      : ($self->ct, qw(setview -exec), qq($self->ct -status), $view);
     my $pid = IPC::Open3::open3($down, $back, undef, @cmd);
 
     # Set the "line discipline" to convert CRLF to \n.
@@ -680,7 +718,7 @@ sub _ipc_cmd {
     while($_ = <$back>) {
         my ($last, $next, $err);
 	my $out = *STDOUT;
-	if (!$manok && m%^cleartool: (Error|Warning):%) {
+	if (!$manok && m%^(?:clear|multi)tool.*?: (Error|Warning):%) {
 	    if ($stderr) {
 	        $out = *STDERR;
 	        $err = 1;
@@ -1174,16 +1212,13 @@ Argv uses the first-found of three different modules for cloning, and
 Marc Girod suspects that only the first one (Clone, in recent versions)
 performs correctly with GLOB objects... work-around in place.
 
-The string 'cleartool' is hard-coded in many places, making it hard to
-implement additional support for multitool commands.
-
 The use of 'cleartool -status' was restored, because of the failure to
 handle interactive comments without it. The ClearCase bug, with setview
 exiting the interactive session to the shell (Found from 2002.05.00 to 7.0.1
 and resulting in a hang under the ipc mode) is worked around by starting a
 new coprocess in the new view.
 
-Cygwin preliminary support on Windows.
+Cygwin support on Windows.
 
 The 'exit' cleartool command is dangerous in ipc mode: it will stop the
 coprocess unconditionally, without Argv updating its ipc status, and the
@@ -1209,9 +1244,9 @@ versions. It's currently maintained on Solaris 9 and Windows XP with CC
 versions is untestable by me.
 
 Marc Girod's testing environment: Solaris 10 (sparc and i386), and
-Windows Vista, with CtCmd on Windows, without IPC::ChildSafe, with
-Clone. Perl 5.8.8 and 5.10.x. Tatyana Shpichko's testing environment:
-RedHat Linux 4, with and without CtCmd, and Windows XP without CtCmd.
+Windows Vista, without IPC::ChildSafe, with Clone. Perl 5.8.8 and
+5.10.x. Tatyana Shpichko's testing environment: RedHat Linux 4, with
+and without CtCmd, and Windows XP without CtCmd.
 
 =head1 FILES
 
@@ -1230,7 +1265,7 @@ David Boyce <dsbperl AT boyski.com>
 
 =head1 COPYRIGHT
 
-Copyright (c) 1999-2007 David Boyce. All rights reserved.  This Perl
+Copyright (c) 1999-2012 David Boyce. All rights reserved.  This Perl
 program is free software; you may redistribute it and/or modify it
 under the same terms as Perl itself.
 
