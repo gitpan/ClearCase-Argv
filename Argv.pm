@@ -1,8 +1,8 @@
 package ClearCase::Argv;
 
-$VERSION = '1.52';
+$VERSION = '1.53';
 
-use Argv 1.26;
+use Argv 1.28;
 
 use constant MSWIN	=> $^O =~ /MSWin|Windows_NT/i ? 1 : 0;
 use constant CYGWIN	=> $^O =~ /cygwin/i ? 1 : 0;
@@ -83,17 +83,30 @@ sub cleartool_path {
 }
 *find_cleartool = \&cleartool_path;  # backward compatibility
 
+sub perlscript {
+    my $self = shift;
+    for (@{$self->{CT}}) {
+	next unless open my $fd, q(<), $_;
+	my $line = <$fd>;
+	close $fd;
+	return 1 if $line =~ m%^(#!|\@rem ).*\bperl\b%i;
+    }
+    return 0;
+}
 sub ct {
     my $self = shift;
     if (ref $self) {
 	if (@_) {
 	    if ($self->ipc) {
-		$self->ipc(0);
+	        # servicing attrs after raw copy: the pid count was not
+	        # incremented yet, so we cannot call ipc(0)
+		delete $self->{IPC};
 		$self->{CT} = ref($_[0])? $_[0] : [@_];
 		$self->ipc(1);
 	    } else {
 		$self->{CT} = ref($_[0])? $_[0] : [@_];
 	    }
+	    $self->{WRAPPER}++ if $self->perlscript;
 	    return defined(wantarray)? $self : undef;
 	} else {
 	    return $self->{CT}? @{$self->{CT}} : @ct;
@@ -115,8 +128,9 @@ sub prog {
 	return $self->SUPER::prog($prg, @_);
     } else {
 	require Text::ParseWords;
-	return $self->SUPER::prog([$self->ct,
-	    Text::ParseWords::parse_line('\s+', 1, $prg)], @_);
+	my @prg = map { s/^'(.*)'$/$1/ || s/^"(.*)"$/$1/; $_ }
+	                         Text::ParseWords::parse_line('\s+', 1, $prg);
+	return $self->SUPER::prog([$self->ct, @prg], @_);
     }
 }
 
@@ -145,7 +159,7 @@ sub system {
     if (!$self->ctcmd && !$self->ipc) {
         if (CYGWIN) {
 	    my @ret = $self->SUPER::qv(@rargs);
-	    $self->unixpath(@ret);
+	    $self->unixpath(@ret) unless $self->{WRAPPER};
 	    print join("", @ret) if @ret;
 	    return $?;
 	} else {
@@ -217,8 +231,9 @@ sub system {
 		} elsif ($efd == 1) {
 		    print STDOUT @data;
 		}
-		delete $self->{IPC}; #destructor would send 'exit' to defunct
-		return scalar @data;
+		my @err = grep !/^cleartool: Warning:/, @data;
+		delete $self->{IPC} if @err; #dtor would send 'exit' to defunct
+		return scalar @err;
 	    } else {
 	        return 0;
 	    }
@@ -234,7 +249,7 @@ sub system {
 }
 
 # Overridden to allow for alternate execution modes.
-sub qx {
+sub qx { # } --for emacs CPerl mode, as 'qx' is a keyword
     return $class->new(@_)->qx if !ref($_[0]) || ref($_[0]) eq 'HASH';
     my $self = shift;
     my @rargs = @_;
@@ -242,7 +257,7 @@ sub qx {
 
     unless ($self->ctcmd || $self->ipc) {
         my @ret = $self->SUPER::qx(@rargs);
-        if (CYGWIN) {
+        if (CYGWIN and !$self->{WRAPPER}) {
 	    $self->unixpath(@ret);
         }
         return wantarray? @ret : join '', @ret;
@@ -564,6 +579,7 @@ sub ipc {
     no strict 'refs';	# because $self may be a symbolic hash ref
     my $level = shift;
     my $output = shift;
+    local $\ = '';	   # no extra newlines e.g. under perl -le ...
     if (defined($level) && !$level) {
 	return 0 unless exists($self->{IPC});
 	my $down = $self->{IPC}->{DOWN};
@@ -574,6 +590,7 @@ sub ipc {
 	print $down "exit\n";
 	my $rc = close($down);
 	waitpid($pid, 0);
+	delete $pidcount{$pid};
 	return $rc || $?;
     } elsif (!defined($level)) {
 	return exists($self->{IPC}) ? $self : 0;
@@ -582,7 +599,9 @@ sub ipc {
     if ($self->ctcmd) {
 	$self->ctcmd(0);	# shut down the CtCmd connection
     }
-    if (exists($class->{IPC}) && $level =~ m%^\d+$%) {
+    if (exists($class->{IPC}) && $level =~ m%^\d+$%
+	                                    && !$self->{CT} && !$class->{CT}
+            || ($self->{CT} && $class->{CT} && $self->{CT} eq $class->{CT})) {
         if (($self ne $class) && !$self->ipc) {
 	    ++$pidcount{$class->{IPC}->{PID}};
 	    $self->{IPC}->{PID}  = $class->{IPC}->{PID};
@@ -599,7 +618,7 @@ sub ipc {
     my($down, $back);
     my $view = ($level =~ /^\d+$/) ? '' : $level;
     my @cmd = !$view ? ($self->ct, '-status')
-      : ($self->ct, qw(setview -exec), qq($self->ct -status), $view);
+      : ($self->ct, qw(setview -exec), join(' ', $self->ct, '-status'), $view);
     my $pid = IPC::Open3::open3($down, $back, undef, @cmd);
 
     # Set the "line discipline" to convert CRLF to \n.
@@ -640,21 +659,11 @@ sub _cw_map {
 
 sub _cvt_input_cw {
     my $self = shift;
+    return if $self->{WRAPPER};
     _cw_map @{$self->{AV_ARGS}};
     for my $o (values %{$self->{AV_OPTS}}) {
         _cw_map grep{$_}@{$o};
     }
-}
-
-sub _qmeta {
-    my $arg = shift;
-    if (CYGWIN || MSWIN) {
-        $arg =~ s%\'%^'%g;
-        $arg = q(') . $arg . q(');
-    } else {
-      $arg = quotemeta($arg);
-    }
-    return $arg;
 }
 
 # commands sent to ipc must be single line ones
@@ -685,13 +694,17 @@ sub _ipc_cmd {
     my $self = shift;
     my ($disposition, $stdout, $stderr, @cmd) = @_;
     local *_;
+    local $\ = '';	   # no extra newlines e.g. under perl -le ...
     _ipc_nl_in_cmt(\@cmd);
     # Send the command to cleartool.
+    my $qm = ((MSWIN || CYGWIN) && !$self->{WRAPPER})?
+                                    sub { shift; s%\'%^'%g; return qq('$_'); }
+                                  : sub { quotemeta shift };
     my $cmd = join(' ', map {
-        m%^$|\s|[\[\]*"'?]% ?
+        m%^$|\s|[\[\]\(\)*"'?]% ?
 	  (m%'% ?
 	     (m%"% ?
-		_qmeta($_) : qq("$_"))
+		$qm->($_) : qq("$_"))
 	       : qq('$_'))
 	    : $_
     } grep {defined} @cmd);
@@ -747,7 +760,7 @@ sub _ipc_cmd {
 	print '+ <=', $_ if $_ && $dbg >= 2;
 	$rc = 1 if $diff && !m%^Files are identical%;
 	next if $next;
-	$self->unixpath($_) if CYGWIN;
+	$self->unixpath($_) if CYGWIN and !$self->{WRAPPER};
 	if ($stdout || ($err && $stderr)) {
 	    if ($disposition && (($err && $stderr == 1) || (!$err && $stdout == 1))) {
 	        push(@$disposition, $_);
@@ -882,8 +895,9 @@ sub new {
     my $proto = shift;
     my $self = $proto->SUPER::new(@_);
     if ($self->ipc) {
-	++$pidcount{$self->{IPC}->{PID}};
-	if (ref($proto)) {
+        no strict 'refs'; # $proto may be a symbolic hash
+	if ($proto->ipc && $self->{IPC}->{PID} == $proto->{IPC}->{PID}) {
+	    ++$pidcount{$self->{IPC}->{PID}};
 	    # Correct the effect of the base cloning on globs
 	    $self->{IPC}->{DOWN} = $proto->{IPC}->{DOWN};
 	    $self->{IPC}->{BACK} = $proto->{IPC}->{BACK};
@@ -929,6 +943,9 @@ ClearCase::Argv - ClearCase-specific subclass of Argv
     # Create label type XX iff it doesn't exist
     ClearCase::Argv->new(qw(mklbtype -nc XX))
 	    if ClearCase::Argv->new(qw(lstype lbtype:XX))->stderr(0)->qx;
+    # Create a multitool ipc session in autochomp mode
+    my $mtx = ['/opt/rational/clearcase/bin/multitool'];
+    my $mt = new ClearCase::Argv({ipc=>1, ct=>$mtx, autochomp=>1});
 
     # Functional interface
     use ClearCase::Argv qw(ctsystem ctexec ctqx ctpipe);
@@ -942,6 +959,10 @@ ClearCase::Argv - ClearCase-specific subclass of Argv
 I<There are more examples in the ./examples subdir> that comes with this
 module. Also, I<the test script is designed as a demo and benchmark> and
 is a good source for cut-and-paste code.
+
+The C<r> directory contains a few regression test cases, unfortunately
+not general enough to be run from C<make test>. The file C<test.cfg>
+allows to tailor some of them for one's environment.
 
 =head1 DESCRIPTION
 
@@ -959,6 +980,13 @@ Similarly, C<ipc> will send commands to a cleartool co-process.  See
 the documentation of these modules for details on what they do, and see
 I<ALTERNATE EXECUTION INTERFACES> below for how to invoke them. Sample
 scripts are packaged with I<ClearCase::Argv> in ./examples.
+
+A new C<ct> optional attribute is introduced in the constructor
+invocation. It may be used to create I<ClearCase::Argv> objects using
+a tool alternative to the default plain I<cleartool>.
+This may be I<multitool>, or I<cleartool> under another account via
+I<sudo>, or even a I<ClearCase::Wrapper>. It is supported for the
+C<fork> and the C<ipc> modes.
 
 I<As ClearCase::Argv is in most other ways identical to its base
 class, see C<perldoc Argv> for substantial further documentation.>
@@ -1232,9 +1260,8 @@ E.g. S<C<< $ct->des(['-fmt', "%[owner]p\n"], 'vob:.')->system >>>
 
 This example is easily rewritten to work in both modes as either:
 
-    S<C<< $ct->des(['-fmt', '%[owner]p\n'], 'vob:.')->system >>>
-
-    S<C<< $ct->des([qw(-fmt %[owner]p\n)], 'vob:.')->system >>>
+    $ct->des(['-fmt', '%[owner]p\n'], 'vob:.')->system
+    $ct->des([qw(-fmt %[owner]p\n)], 'vob:.')->system
 
 =head1 PORTABILITY
 
@@ -1243,10 +1270,11 @@ versions. It's currently maintained on Solaris 9 and Windows XP with CC
 7.0 using Perl5.8.x.  Viability on other platforms and/or earlier
 versions is untestable by me.
 
-Marc Girod's testing environment: Solaris 10 (sparc and i386), and
-Windows Vista, without IPC::ChildSafe, with Clone. Perl 5.8.8 and
-5.10.x. Tatyana Shpichko's testing environment: RedHat Linux 4, with
-and without CtCmd, and Windows XP without CtCmd.
+Marc Girod's testing environment: Solaris 10 (sparc and i386),
+GNU/Linux 2.6, and Windows Vista, without IPC::ChildSafe, with
+Clone. Perl 5.8.8, 5.10, 5.14, 5.16. Tatiana Shpichko's testing
+environment: RedHat Linux 4, with and without CtCmd, and Windows XP
+without CtCmd.
 
 =head1 FILES
 
@@ -1265,7 +1293,7 @@ David Boyce <dsbperl AT boyski.com>
 
 =head1 COPYRIGHT
 
-Copyright (c) 1999-2012 David Boyce. All rights reserved.  This Perl
+Copyright (c) 1999-2013 David Boyce. All rights reserved.  This Perl
 program is free software; you may redistribute it and/or modify it
 under the same terms as Perl itself.
 

@@ -345,7 +345,6 @@ Revision history for Perl extension ClearCase::Argv.
 	- cygwin: one more case of converting backslashes: vob:\foo (e.g. hyperlink)
 	- mkattr: support for single quotes in string values
 	- ipc: support for multiline comments; added test case
-	- ALL CHANGES FROM 1.41 THROUGH HERE CONTRIBUTED BY Marc Girod.
 
 1.50 Sat Dec 18 14:49:48 GMT 2010
         - cygwin: converted backslashes in output more aggressively
@@ -362,6 +361,18 @@ Revision history for Perl extension ClearCase::Argv.
 	- new example: cleanuplf --cleanup lost+found
 	- support for using multitool, and mtfunc example
 	- fix: broken pipe after failed setview in ipc mode
+
+1.53 Wed Apr 17 15:25:54 CEST 2013
+        - one more example: elthier (vob element type hierarchy)
+	- minor documentation fixes and additions
+	- fix to bug in relation to setview
+	- parsing command given as strings with embedded quotes
+	- reference count for different ipc processes
+	- test case updates for wrapper uses
+	- skip cygwin conversions, if wrapper used as ipc process
+	- require Argv 1.28 for Summary
+	- protect print to socket in ipc against the use of 'perl -le'
+	- ALL CHANGES FROM 1.41 THROUGH HERE CONTRIBUTED BY Marc Girod.
 
 BACKWARD COMPATIBILITY NOTES:
 

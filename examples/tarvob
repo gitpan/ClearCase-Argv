@@ -65,9 +65,9 @@ for my $tag (@ARGV) {
 warn "\n= ", scalar(localtime), "\n";
 
 if ($opt{rgy}) {
-    my $r = ($opt{backupdir} || '/var/tmp') . '/RGY.tar.gz';
+    my $r = ($opt{backupdir} || '/var/tmp') . 'config.tar.gz';
     my $d = '/var/adm/rational/clearcase';
-    $rc++ if Argv->new(qw(gtar -czf), $r, $d)->system;
+    $rc++ if Argv->new(qw(gtar -cf), $r, $d)->system;
 }
 
 if ($opt{z} && @backups) {
