@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               ClearCase-Argv
-version:            1.53
+version:            1.54
 abstract:           ~
 author:  []
 license:            unknown
@@ -10,7 +10,7 @@ configure_requires:
 build_requires:
     ExtUtils::MakeMaker:  0
 requires:
-    Argv:  1.26
+    Argv:  1.28
 no_index:
     directory:
         - t

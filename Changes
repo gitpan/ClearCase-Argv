@@ -372,20 +372,7 @@ Revision history for Perl extension ClearCase::Argv.
 	- skip cygwin conversions, if wrapper used as ipc process
 	- require Argv 1.28 for Summary
 	- protect print to socket in ipc against the use of 'perl -le'
+
+1.54 Tue May 28 07:01:15 EDT 2013
+	- Fix RT #85666 - version mismatch between code and Makefile.PL
 	- ALL CHANGES FROM 1.41 THROUGH HERE CONTRIBUTED BY Marc Girod.
-
-BACKWARD COMPATIBILITY NOTES:
-
-A case was reported in which changes in 1.44 broke backward
-compatibility, in the domain of quoting arguments.  This is
-unfortunate, and was fixed in the critical cases (eg mkattr).
-However, the changes were not gratuitous, and actually fixed
-discrepancies between the behavior in the different modes and added
-e.g. support for the use of quotes inside comments. So they were
-not withdrawn, with the effect that total backwards compatibility
-was not restored.
-
-Version 1.45 again brings some amount of backwards incompatibilities,
-with fixes to the way std output and error may be redirected or thrown
-away. The benefit in increased functionality and consistency is once
-again considered worth the while.
